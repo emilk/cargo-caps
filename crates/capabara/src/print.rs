@@ -6,12 +6,19 @@ use crate::symbol::{Symbol, SymbolCategory};
 
 pub struct PrintOptions {
     pub depth: u32,
+    pub filter: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Tree {
     Leaf(Symbol),
     Node(BTreeMap<String, Tree>),
+}
+
+impl Default for Tree {
+    fn default() -> Self {
+        Self::Node(BTreeMap::new())
+    }
 }
 
 impl Tree {
@@ -26,6 +33,35 @@ impl Tree {
         match self {
             Tree::Leaf(_) => 1,
             Tree::Node(children) => children.values().map(|child| child.symbol_count()).sum(),
+        }
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        matches!(self, Tree::Leaf(_))
+    }
+
+    /// Collapse nodes that contain only a single leaf, recursively
+    pub fn collapse_single_nodes(self, depth: usize, may_collapse: bool) -> Self {
+        match self {
+            Tree::Leaf(_) => self,
+            Tree::Node(mut children) => {
+                // First, recursively collapse all children
+                let may_collapse_child = children.len() == 1;
+                for child in children.values_mut() {
+                    *child =
+                        std::mem::take(child).collapse_single_nodes(depth + 1, may_collapse_child);
+                }
+
+                if may_collapse
+                    && 4 < depth
+                    && children.len() == 1
+                    && children.values().next().is_some_and(Self::is_leaf)
+                {
+                    children.into_iter().next().unwrap().1
+                } else {
+                    Tree::Node(children)
+                }
+            }
         }
     }
 }
@@ -73,13 +109,17 @@ fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
 
 /// Print a tree structure with proper indentation and tree characters
 fn print_tree(tree: &Tree, prefix: &str, max_depth: u32) {
+    let include_mangled = true; // TODO: make a parameter
     match tree {
         Tree::Leaf(symbol) => {
-            // TODO: add option to print mangled name
-            println!("{}└── {}", prefix, symbol.demangled);
+            println!("{}└── {}", prefix, symbol.format(include_mangled));
         }
         Tree::Node(children) => {
-            if max_depth > 0 {
+            if max_depth == 0 {
+                // Show count only when max depth is reached
+                let total_symbols = tree.symbol_count();
+                println!("{}└── ({} symbols)", prefix, total_symbols);
+            } else {
                 let child_entries: Vec<_> = children.iter().collect();
                 for (i, (name, child)) in child_entries.iter().enumerate() {
                     let is_last = i == child_entries.len() - 1;
@@ -88,8 +128,12 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32) {
 
                     match child {
                         Tree::Leaf(symbol) => {
-                            // TODO: add option to print mangled name
-                            println!("{}{} {}", prefix, item_prefix, symbol.demangled);
+                            println!(
+                                "{}{} {}",
+                                prefix,
+                                item_prefix,
+                                symbol.format(include_mangled)
+                            );
                         }
                         Tree::Node(_) => {
                             let count = child.symbol_count();
@@ -106,19 +150,15 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32) {
                         }
                     }
                 }
-            } else {
-                // Show count only when max depth is reached
-                let total_symbols = tree.symbol_count();
-                println!("{}└── ({} symbols)", prefix, total_symbols);
             }
         }
     }
 }
 
-fn get_or_create_category<'a>(
-    root: &'a mut BTreeMap<String, Tree>,
+fn get_or_create_category(
+    root: &mut BTreeMap<String, Tree>,
     name: impl Into<String>,
-) -> &'a mut BTreeMap<String, Tree> {
+) -> &mut BTreeMap<String, Tree> {
     let category = root
         .entry(name.into())
         .or_insert_with(|| Tree::Node(BTreeMap::new()));
@@ -139,12 +179,13 @@ fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
                 tree_from_symbol(category, symbol);
             }
             SymbolCategory::TraitImpl {
-                trait_for: _,
+                trait_for,
                 target_crate,
             } => {
                 let category = get_or_create_category(&mut root, "trait_impls");
-                let subcategory = get_or_create_category(category, target_crate);
-                tree_from_symbol(subcategory, symbol);
+                let category = get_or_create_category(category, target_crate);
+                let category = get_or_create_category(category, trait_for);
+                category.insert(symbol.demangled.clone(), Tree::Leaf(symbol.clone()));
             }
             SymbolCategory::Compiler(_) => {
                 let category = get_or_create_category(&mut root, "compiler");
@@ -155,6 +196,11 @@ fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
                 let name = &symbol.demangled;
                 let system_category = if name.starts_with("GCC_except_table") {
                     "GCC_except_table"
+                } else if name.starts_with("lCPI") {
+                    // local Constant Pool Identifier
+                    "lCPI"
+                } else if name.starts_with("ltmp") {
+                    "ltmp"
                 } else if let Some(dot_pos) = name.find('.') {
                     // Extract prefix before first dot, or use the entire name if no dot
                     &name[..dot_pos]
@@ -174,6 +220,34 @@ fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
     Tree::Node(root)
 }
 
+fn filter_tree_by_path(tree: &Tree, path: &[&str]) -> Option<Tree> {
+    if path.is_empty() {
+        return Some(tree.clone());
+    }
+
+    match tree {
+        Tree::Leaf(_) => None, // Can't navigate deeper from a leaf
+        Tree::Node(children) => {
+            let first_segment = path[0];
+            let remaining_path = &path[1..];
+
+            if let Some(child) = children.get(first_segment) {
+                // If we found the matching child, recursively filter it
+                if let Some(filtered_child) = filter_tree_by_path(child, remaining_path) {
+                    // Create a new tree with only the path to the filtered content
+                    let mut new_children = BTreeMap::new();
+                    new_children.insert(first_segment.to_string(), filtered_child);
+                    Some(Tree::Node(new_children))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+    }
+}
+
 pub fn print_symbols(
     binary_path: &Path,
     symbols: Vec<Symbol>,
@@ -188,10 +262,27 @@ pub fn print_symbols(
         return Ok(());
     }
 
-    let tree = tree_from_symbols(&symbols);
+    let mut tree = tree_from_symbols(&symbols);
+    if true {
+        tree = tree.collapse_single_nodes(0, false);
+    }
+    let mut display_path = binary_path.display().to_string();
+
+    // Apply filter if specified
+    if let Some(filter_path) = &options.filter {
+        let path_segments: Vec<&str> = filter_path.split('/').collect();
+        if let Some(filtered_tree) = filter_tree_by_path(&tree, &path_segments) {
+            tree = filtered_tree;
+            display_path = format!("{}/{}", display_path, filter_path);
+        } else {
+            println!("{}/{}", binary_path.display(), filter_path);
+            println!("└── (no symbols found)");
+            return Ok(());
+        }
+    }
 
     // Print the file path as root
-    println!("{}", binary_path.display());
+    println!("{}", display_path);
 
     // Print the entire tree using the single print_tree function
     print_tree(&tree, "", depth);
@@ -200,8 +291,9 @@ pub fn print_symbols(
 }
 
 fn tree_from_symbol(root: &mut BTreeMap<String, Tree>, symbol: &Symbol) {
-    // Split by :: to create hierarchical structure
-    let parts: Vec<&str> = symbol.demangled.split("::").collect();
+    // Normalize .. to :: for consistent hierarchical structure
+    let normalized_name = symbol.demangled.replace("..", "::");
+    let parts: Vec<&str> = normalized_name.split("::").collect();
     insert_symbol_into_tree(root, &parts, symbol.clone());
 }
 

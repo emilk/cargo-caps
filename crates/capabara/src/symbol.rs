@@ -20,6 +20,16 @@ impl Symbol {
         }
     }
 
+    pub fn format(&self, include_mangled: bool) -> String {
+        let Self {
+            mangled, demangled, ..
+        } = self;
+        if include_mangled && mangled != demangled {
+            format!("{demangled} ({mangled})")
+        } else {
+            demangled.clone()
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -81,7 +91,7 @@ fn classify_symbol(demangled_symbol: &str, original_symbol: &str) -> SymbolCateg
             let trait_for = &first_part[2..as_pos]; // Skip "_<"
             let remaining = &first_part[as_pos + 4..]; // Skip " as "
 
-            // Extract target crate from the remaining part
+            // Extract target crate from the remaining part (handle both .. and > delimiters)
             let target_crate = if let Some(dot_dot) = remaining.find("..") {
                 &remaining[..dot_dot]
             } else if let Some(gt_pos) = remaining.find(">") {
@@ -90,8 +100,11 @@ fn classify_symbol(demangled_symbol: &str, original_symbol: &str) -> SymbolCateg
                 remaining
             };
 
+            // Normalize trait_for by replacing .. with ::
+            let normalized_trait_for = trait_for.replace("..", "::");
+
             return SymbolCategory::TraitImpl {
-                trait_for: trait_for.to_string(),
+                trait_for: normalized_trait_for,
                 target_crate: target_crate.to_string(),
             };
         }

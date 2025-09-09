@@ -15,6 +15,10 @@ struct Args {
     /// Show symbols at given depth (0=summary only, 1=categories, 2=symbols)
     #[arg(short, long, default_value = "2")]
     depth: u32,
+
+    /// Filter to show only symbols under the given tree path (e.g., "crates/std/sync")
+    #[arg(short, long)]
+    filter: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -27,6 +31,7 @@ fn main() -> Result<()> {
     let symbols = capabara::extract_symbols(&args.binary_path)?;
     let options = PrintOptions {
         depth: args.depth,
+        filter: args.filter,
     };
     capabara::print::print_symbols(&args.binary_path, symbols, options)?;
     Ok(())
