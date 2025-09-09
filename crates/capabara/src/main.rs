@@ -12,9 +12,9 @@ struct Args {
     /// Path to the binary file
     binary_path: PathBuf,
 
-    /// Show all symbols within each crate (default: only show crate names)
+    /// Show symbols at given depth (0=summary only, 1=categories, 2=symbols)
     #[arg(short, long)]
-    verbose: bool,
+    depth: Option<u32>,
 
     /// Show symbols for a specific module (by display name)
     #[arg(short, long)]
@@ -29,13 +29,9 @@ fn main() -> Result<()> {
     }
 
     let symbols = capabara::extract_symbols(&args.binary_path)?;
-    let options = {
-        let verbose = args.verbose;
-        let filter_module = args.module.as_deref();
-        PrintOptions {
-            verbose,
-            filter_module,
-        }
+    let options = PrintOptions {
+        depth: args.depth,
+        filter_module: args.module.as_deref(),
     };
     capabara::print::print_symbols(&args.binary_path, symbols, options)?;
     Ok(())
