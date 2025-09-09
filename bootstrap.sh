@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Extract and demangle symbols from capabara itself
-# Usage: ./extract-symbols.sh
+# Usage: ./bootstrap.sh [--module "module_name"]
 
 set -e
 
@@ -15,5 +15,5 @@ if [ ! -f "$CAPABARA_BINARY" ] || [ "$SCRIPT_DIR/crates/capabara/src/main.rs" -n
     cargo build --release --quiet
 fi
 
-# Run capabara on itself
-"$CAPABARA_BINARY" "$CAPABARA_BINARY"
+# Run capabara on itself, passing through any arguments
+"$CAPABARA_BINARY" "$CAPABARA_BINARY" "$@"
