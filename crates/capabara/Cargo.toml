@@ -1,0 +1,11 @@
+[package]
+name = "capabara"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+object = "0.36"
+cpp_demangle = "0.4"
+rustc-demangle = "0.1"
+anyhow = "1.0"
