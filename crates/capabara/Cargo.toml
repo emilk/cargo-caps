@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow = "1.0"
+ar = "0.9"
 clap = { version = "4.0", features = ["derive"] }
 cpp_demangle = "0.4"
 object = "0.36"

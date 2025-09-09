@@ -5,6 +5,8 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
+pub mod rlib;
+
 fn demangle_symbol(name: &str) -> String {
     if let Ok(demangled) = cpp_demangle::Symbol::new(name) {
         return decode_rust_type(&demangled.to_string());
@@ -25,7 +27,7 @@ pub struct Symbol {
 }
 
 impl Symbol {
-    fn from_mangled(mangled: String) -> Self {
+    pub fn from_mangled(mangled: String) -> Self {
         let demangled = demangle_symbol(&mangled);
         let category = classify_symbol(&demangled, &mangled);
         Self {
@@ -187,6 +189,11 @@ pub fn extract_symbols(
     verbose: bool,
     filter_module: Option<&str>,
 ) -> Result<()> {
+    // Check if this is an rlib file
+    if rlib::is_rlib(binary_path)? {
+        return rlib::extract_rlib_symbols(binary_path, verbose, filter_module);
+    }
+
     let data = fs::read(binary_path)
         .with_context(|| format!("Failed to read binary file: {}", binary_path.display()))?;
 
