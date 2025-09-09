@@ -5,9 +5,11 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use object::{Object, ObjectSymbol};
+use object::{
+    Object, ObjectSymbol, SymbolKind as ObjectSymbolKind, SymbolScope as ObjectSymbolScope,
+};
 
-use crate::symbol::Symbol;
+use crate::symbol::{Symbol, SymbolKind, SymbolScope};
 
 pub mod demangle;
 pub mod print;
@@ -67,7 +69,25 @@ fn collect_file_symbols(all_symbols: &mut Vec<Symbol>, file: &object::File<'_>) 
         if let Ok(name) = symbol.name()
             && !name.is_empty()
         {
-            all_symbols.push(Symbol::from_mangled(name.to_string()));
+            let scope = match symbol.scope() {
+                ObjectSymbolScope::Unknown => SymbolScope::Unknown,
+                ObjectSymbolScope::Compilation => SymbolScope::Compilation,
+                ObjectSymbolScope::Linkage => SymbolScope::Linkage,
+                ObjectSymbolScope::Dynamic => SymbolScope::Dynamic,
+            };
+
+            let kind = match symbol.kind() {
+                ObjectSymbolKind::Unknown => SymbolKind::Unknown,
+                ObjectSymbolKind::Text => SymbolKind::Text,
+                ObjectSymbolKind::Data => SymbolKind::Data,
+                ObjectSymbolKind::Section => SymbolKind::Section,
+                ObjectSymbolKind::File => SymbolKind::File,
+                ObjectSymbolKind::Label => SymbolKind::Label,
+                ObjectSymbolKind::Tls => SymbolKind::Tls,
+                _ => SymbolKind::Unknown,
+            };
+
+            all_symbols.push(Symbol::with_metadata(name.to_string(), scope, kind));
         }
     }
 }

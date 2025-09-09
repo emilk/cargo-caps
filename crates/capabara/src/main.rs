@@ -23,6 +23,10 @@ struct Args {
     /// Include mangled symbol names alongside demangled names
     #[arg(short = 'm', long, default_value = "false")]
     mangled: bool,
+
+    /// Show symbol metadata (scope and kind)
+    #[arg(long, default_value = "false")]
+    show_metadata: bool,
 }
 
 fn main() -> Result<()> {
@@ -33,10 +37,12 @@ fn main() -> Result<()> {
     }
 
     let symbols = capabara::extract_symbols(&args.binary_path)?;
+
     let options = PrintOptions {
         depth: args.depth,
         filter: args.filter,
         include_mangled: args.mangled,
+        show_metadata: args.show_metadata,
     };
     capabara::print::print_symbols(&args.binary_path, symbols, options)?;
     Ok(())

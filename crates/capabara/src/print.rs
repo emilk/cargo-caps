@@ -8,6 +8,7 @@ pub struct PrintOptions {
     pub depth: u32,
     pub filter: Option<String>,
     pub include_mangled: bool,
+    pub show_metadata: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -109,10 +110,10 @@ fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
 }
 
 /// Print a tree structure with proper indentation and tree characters
-fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, include_mangled: bool) {
+fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions) {
     match tree {
         Tree::Leaf(symbol) => {
-            println!("{}└── {}", prefix, symbol.format(include_mangled));
+            println!("{}└── {}", prefix, symbol.format_with_metadata(options.include_mangled, options.show_metadata));
         }
         Tree::Node(children) => {
             if max_depth == 0 {
@@ -132,7 +133,7 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, include_mangled: bool) 
                                 "{}{} {}",
                                 prefix,
                                 item_prefix,
-                                symbol.format(include_mangled)
+                                symbol.format_with_metadata(options.include_mangled, options.show_metadata)
                             );
                         }
                         Tree::Node(_) => {
@@ -145,7 +146,7 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, include_mangled: bool) 
                                     child,
                                     &format!("{}{}", prefix, child_prefix),
                                     max_depth - 1,
-                                    include_mangled,
+                                    options,
                                 );
                             }
                         }
@@ -294,7 +295,7 @@ pub fn print_symbols(
     println!("{}", display_path);
 
     // Print the entire tree using the single print_tree function
-    print_tree(&tree, "", depth, options.include_mangled);
+    print_tree(&tree, "", depth, &options);
 
     Ok(())
 }

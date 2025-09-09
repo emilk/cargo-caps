@@ -2,21 +2,89 @@ use std::fmt;
 
 use crate::demangle::demangle_symbol;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SymbolScope {
+    /// Unknown scope.
+    Unknown,
+
+    /// Symbol is visible to the compilation unit.
+    Compilation,
+
+    /// Symbol is visible to the static linkage unit.
+    Linkage,
+
+    /// Symbol is visible to dynamically linked objects.
+    Dynamic,
+}
+
+impl fmt::Display for SymbolScope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SymbolScope::Unknown => write!(f, "unknown"),
+            SymbolScope::Compilation => write!(f, "local"),
+            SymbolScope::Linkage => write!(f, "static"),
+            SymbolScope::Dynamic => write!(f, "dynamic"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SymbolKind {
+    /// The symbol kind is unknown.
+    Unknown,
+
+    /// The symbol is for executable code.
+    Text,
+
+    /// The symbol is for a data object.
+    Data,
+
+    /// The symbol is for a section.
+    Section,
+
+    /// The symbol is the name of a file. It precedes symbols within that file.
+    File,
+
+    /// The symbol is for a code label.
+    Label,
+
+    /// The symbol is for a thread local storage entity.
+    Tls,
+}
+
+impl fmt::Display for SymbolKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SymbolKind::Unknown => write!(f, "unknown"),
+            SymbolKind::Text => write!(f, "function"),
+            SymbolKind::Data => write!(f, "data"),
+            SymbolKind::Section => write!(f, "section"),
+            SymbolKind::File => write!(f, "file"),
+            SymbolKind::Label => write!(f, "label"),
+            SymbolKind::Tls => write!(f, "tls"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Symbol {
     pub mangled: String,
     pub demangled: String,
     pub category: SymbolCategory,
+    pub scope: SymbolScope,
+    pub kind: SymbolKind,
 }
 
 impl Symbol {
-    pub fn from_mangled(mangled: String) -> Self {
+    pub fn with_metadata(mangled: String, scope: SymbolScope, kind: SymbolKind) -> Self {
         let demangled = demangle_symbol(&mangled);
         let category = classify_symbol(&demangled, &mangled);
         Self {
             mangled,
             demangled,
             category,
+            scope,
+            kind,
         }
     }
 
@@ -28,6 +96,17 @@ impl Symbol {
             format!("{demangled} ({mangled})")
         } else {
             demangled.clone()
+        }
+    }
+
+    pub fn format_with_metadata(&self, include_mangled: bool, show_metadata: bool) -> String {
+        let base = self.format(include_mangled);
+        if show_metadata {
+            let scope_str = self.scope.to_string();
+            let kind_str = self.kind.to_string();
+            format!("{base} [{scope_str}/{kind_str}]")
+        } else {
+            base
         }
     }
 }
