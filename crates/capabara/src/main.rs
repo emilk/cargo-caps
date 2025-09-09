@@ -42,8 +42,17 @@ enum Module {
         target_crate: String,
     },
     Compiler(String),
-    System,
+    System(SystemSymbolType),
     Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum SystemSymbolType {
+    OutlinedFunctions,
+    StubHelpers, 
+    LibraryFunctions,
+    Symbols,
+    Other(String),
 }
 
 impl fmt::Display for Module {
@@ -57,7 +66,13 @@ impl fmt::Display for Module {
                 write!(f, "trait_impl: {} → {}", trait_for, target_crate)
             }
             Module::Compiler(name) => write!(f, "compiler: {}", name),
-            Module::System => write!(f, "system"),
+            Module::System(sys_type) => match sys_type {
+                SystemSymbolType::OutlinedFunctions => write!(f, "system: outlined functions"),
+                SystemSymbolType::StubHelpers => write!(f, "system: stub helpers"),
+                SystemSymbolType::LibraryFunctions => write!(f, "system: library functions"),
+                SystemSymbolType::Symbols => write!(f, "system: symbols"),
+                SystemSymbolType::Other(name) => write!(f, "system: {}", name),
+            },
             Module::Unknown => write!(f, "unknown"),
         }
     }
@@ -106,8 +121,42 @@ fn classify_symbol(demangled_symbol: &str, original_symbol: &str) -> Module {
         return Module::Unknown; // Could be Rust but failed to demangle
     }
 
-    // System/C symbols
-    Module::System
+    // System/C symbols - classify by pattern
+    let sys_type = classify_system_symbol(original_symbol);
+    Module::System(sys_type)
+}
+
+fn classify_system_symbol(symbol: &str) -> SystemSymbolType {
+    if symbol.starts_with("_OUTLINED_FUNCTION_") {
+        SystemSymbolType::OutlinedFunctions
+    } else if symbol.contains("stub_helper") {
+        SystemSymbolType::StubHelpers  
+    } else if symbol.starts_with('_') && (
+        symbol.contains("printf") || 
+        symbol.contains("malloc") || 
+        symbol.contains("free") ||
+        symbol.contains("memcpy") ||
+        symbol.contains("strlen") ||
+        symbol.contains("strcmp") ||
+        symbol.contains("pthread") ||
+        symbol.starts_with("_lib") ||
+        symbol.starts_with("_LC_") ||
+        symbol.contains("objc_") ||
+        symbol.contains("dyld_")
+    ) {
+        SystemSymbolType::LibraryFunctions
+    } else if symbol.starts_with('_') && (
+        symbol.contains("GLOBAL_OFFSET_TABLE") ||
+        symbol.contains("_data") ||
+        symbol.contains("_bss") ||
+        symbol.contains("_text") ||
+        symbol.starts_with("_l") ||
+        symbol.starts_with("_L")
+    ) {
+        SystemSymbolType::Symbols
+    } else {
+        SystemSymbolType::Other(symbol.to_string())
+    }
 }
 
 fn decode_rust_type(encoded: &str) -> String {
@@ -213,9 +262,116 @@ fn extract_symbols(
         println!("Modules found in {}:", binary_path.display());
         println!();
 
-        for (module, symbols) in symbols_by_module {
-            println!("{} ({} symbols)", module, symbols.len());
+        // Separate different types of modules
+        let mut crates = Vec::new();
+        let mut trait_impls_by_target = BTreeMap::new();
+        let mut compiler = Vec::new();
+        let mut system_by_type = BTreeMap::new();
+        let mut unknown = Vec::new();
+
+        for (module, symbols) in &symbols_by_module {
+            match module {
+                Module::Crate(name) => crates.push((name.clone(), symbols.len())),
+                Module::TraitImpl { target_crate, .. } => {
+                    trait_impls_by_target
+                        .entry(target_crate.clone())
+                        .or_insert_with(Vec::new)
+                        .push(symbols.len());
+                }
+                Module::Compiler(name) => compiler.push((name.clone(), symbols.len())),
+                Module::System(sys_type) => {
+                    system_by_type
+                        .entry(sys_type.clone())
+                        .or_insert_with(Vec::new)
+                        .push(symbols.len());
+                }
+                Module::Unknown => unknown.push(("unknown".to_string(), symbols.len())),
+            }
         }
+
+        // Print crates
+        println!("# Crates ({}):", crates.len());
+        crates.sort();
+        for (name, count) in &crates {
+            println!("  {} ({} symbols)", name, count);
+        }
+
+        // Print trait implementations grouped by target crate
+        if !trait_impls_by_target.is_empty() {
+            println!();
+            println!("# Trait implementations by target crate:");
+            for (target_crate, symbol_counts) in &trait_impls_by_target {
+                let total_symbols: usize = symbol_counts.iter().sum();
+                let impl_count = symbol_counts.len();
+                println!("  {} → {} ({} impls, {} symbols total)", 
+                    "trait_impl", target_crate, impl_count, total_symbols);
+            }
+        }
+
+        // Print other categories
+        if !compiler.is_empty() {
+            println!();
+            println!("# Compiler:");
+            for (name, count) in &compiler {
+                println!("  {} ({} symbols)", name, count);
+            }
+        }
+
+        if !system_by_type.is_empty() {
+            println!();
+            println!("# System:");
+            
+            let mut outlined_total = 0;
+            let mut stub_helpers_total = 0;
+            let mut library_functions_total = 0;
+            let mut symbols_total = 0;
+            let mut other_total = 0;
+            
+            for (sys_type, symbol_counts) in &system_by_type {
+                let total_symbols: usize = symbol_counts.iter().sum();
+                match sys_type {
+                    SystemSymbolType::OutlinedFunctions => outlined_total += total_symbols,
+                    SystemSymbolType::StubHelpers => stub_helpers_total += total_symbols,
+                    SystemSymbolType::LibraryFunctions => library_functions_total += total_symbols,
+                    SystemSymbolType::Symbols => symbols_total += total_symbols,
+                    SystemSymbolType::Other(_) => other_total += total_symbols,
+                }
+            }
+            
+            if outlined_total > 0 {
+                println!("  outlined functions ({} symbols)", outlined_total);
+            }
+            if stub_helpers_total > 0 {
+                println!("  stub helpers ({} symbols)", stub_helpers_total);
+            }
+            if library_functions_total > 0 {
+                println!("  library functions ({} symbols)", library_functions_total);
+            }
+            if symbols_total > 0 {
+                println!("  symbols ({} symbols)", symbols_total);
+            }
+            if other_total > 0 {
+                println!("  other ({} symbols)", other_total);
+            }
+        }
+
+        if !unknown.is_empty() {
+            println!();
+            println!("# Unknown:");
+            for (name, count) in &unknown {
+                println!("  {} ({} symbols)", name, count);
+            }
+        }
+
+        // Print summary
+        let total_symbols: usize = symbols_by_module.values().map(|v| v.len()).sum();
+        
+        println!();
+        println!("# Summary:");
+        println!("  {} crates", crates.len());
+        println!("  {} trait implementations", 
+            trait_impls_by_target.values().map(|v| v.len()).sum::<usize>());
+        println!("  {} total symbols", total_symbols);
     }
 
     Ok(())
