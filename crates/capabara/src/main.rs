@@ -13,12 +13,8 @@ struct Args {
     binary_path: PathBuf,
 
     /// Show symbols at given depth (0=summary only, 1=categories, 2=symbols)
-    #[arg(short, long)]
-    depth: Option<u32>,
-
-    /// Show symbols for a specific module (by display name)
-    #[arg(short, long)]
-    module: Option<String>,
+    #[arg(short, long, default_value = "2")]
+    depth: u32,
 }
 
 fn main() -> Result<()> {
@@ -31,7 +27,6 @@ fn main() -> Result<()> {
     let symbols = capabara::extract_symbols(&args.binary_path)?;
     let options = PrintOptions {
         depth: args.depth,
-        filter_module: args.module.as_deref(),
     };
     capabara::print::print_symbols(&args.binary_path, symbols, options)?;
     Ok(())

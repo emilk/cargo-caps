@@ -20,9 +20,6 @@ impl Symbol {
         }
     }
 
-    pub fn is_demangled(&self) -> bool {
-        self.mangled != self.demangled
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

@@ -2,269 +2,40 @@ use std::{collections::BTreeMap, path::Path};
 
 use anyhow::Result;
 
-use crate::symbol::{Symbol, SymbolCategory, SystemSymbolType};
+use crate::symbol::{Symbol, SymbolCategory};
 
-pub struct PrintOptions<'a> {
-    pub depth: Option<u32>,
-    pub filter_module: Option<&'a str>,
+pub struct PrintOptions {
+    pub depth: u32,
 }
 
-pub fn print_symbols(
-    binary_path: &Path,
-    symbols: Vec<Symbol>,
-    options: PrintOptions,
-) -> Result<()> {
-    let mut symbols_by_category: BTreeMap<SymbolCategory, Vec<Symbol>> = BTreeMap::new();
-
-    for sym in symbols {
-        symbols_by_category
-            .entry(sym.category.clone())
-            .or_default()
-            .push(sym);
-    }
-
-    print_symbols_by_category(binary_path, symbols_by_category, options)
+#[derive(Debug, Clone)]
+pub enum Tree {
+    Leaf(Symbol),
+    Node(BTreeMap<String, Tree>),
 }
 
-fn print_symbols_by_category(
-    binary_path: &Path,
-    symbols_by_category: BTreeMap<SymbolCategory, Vec<Symbol>>,
-    options: PrintOptions,
-) -> Result<()> {
-    // Filter to specific category if requested
-    if let Some(filter_name) = options.filter_module {
-        return print_filtered_category(binary_path, &symbols_by_category, filter_name, options.depth);
+impl Tree {
+    /// Create a Tree from a list of symbols, grouping by dot-separated prefixes
+    pub fn from_symbols(symbols: &[Symbol]) -> Self {
+        let grouped = group_symbols_by_prefix(symbols);
+        Self::Node(grouped)
     }
 
-    // Print hierarchical tree based on depth
-    let total_symbols: usize = symbols_by_category.values().map(|v| v.len()).sum();
-    let depth = options.depth.unwrap_or(1); // Default to depth 1 (show categories)
-    
-    println!("{}", binary_path.display());
-    
-    if depth == 0 {
-        // Depth 0: Only summary
-        println!("└── {} total symbols", total_symbols);
-        return Ok(());
-    }
-
-    // Separate different types of categories
-    let mut crates = Vec::new();
-    let mut trait_impls_by_target: BTreeMap<String, Vec<(String, usize)>> = BTreeMap::new();
-    let mut compiler = Vec::new();
-    let mut system_by_type: BTreeMap<SystemSymbolType, Vec<Symbol>> = BTreeMap::new();
-    let mut unknown = Vec::new();
-
-    for (category, symbols) in &symbols_by_category {
-        match category {
-            SymbolCategory::Crate(name) => crates.push((name.clone(), symbols.clone())),
-            SymbolCategory::TraitImpl { trait_for, target_crate } => {
-                trait_impls_by_target
-                    .entry(target_crate.clone())
-                    .or_default()
-                    .push((trait_for.clone(), symbols.len()));
-            }
-            SymbolCategory::Compiler(name) => compiler.push((name.clone(), symbols.clone())),
-            SymbolCategory::System(_) => {
-                // Group all system symbols together for later dot-prefix processing
-                for symbol in symbols {
-                    system_by_type
-                        .entry(SystemSymbolType::Other("system".to_string()))
-                        .or_default()
-                        .push(symbol.clone());
-                }
-            }
-            SymbolCategory::Unknown => unknown.extend(symbols.iter().cloned()),
-        }
-    }
-
-    // Sort crates and compiler entries
-    crates.sort_by(|a, b| a.0.cmp(&b.0));
-    compiler.sort_by(|a, b| a.0.cmp(&b.0));
-
-    let mut sections = Vec::new();
-    
-    // Add crates section
-    if !crates.is_empty() {
-        sections.push(("crates", crates.len()));
-    }
-    
-    // Add trait implementations section
-    if !trait_impls_by_target.is_empty() {
-        let total_impls: usize = trait_impls_by_target.values().map(|v| v.len()).sum();
-        sections.push(("trait_impls", total_impls));
-    }
-    
-    // Add compiler section
-    if !compiler.is_empty() {
-        sections.push(("compiler", compiler.len()));
-    }
-    
-    // Add system section
-    if !system_by_type.is_empty() {
-        // Count the total number of system symbols for display
-        let total_system_symbols: usize = system_by_type.values().map(|v| v.len()).sum();
-        sections.push(("system", total_system_symbols));
-    }
-    
-    // Add unknown section
-    if !unknown.is_empty() {
-        sections.push(("unknown", 1));
-    }
-
-    // Print sections
-    for (i, (section_name, section_count)) in sections.iter().enumerate() {
-        let is_last_section = i == sections.len() - 1;
-        let section_prefix = if is_last_section { "└──" } else { "├──" };
-        let child_prefix = if is_last_section { "    " } else { "│   " };
-
-        match *section_name {
-            "crates" => {
-                println!("{} crates ({} total)", section_prefix, section_count);
-                if depth >= 2 {
-                    print_crates_tree(&crates, child_prefix, depth);
-                }
-            }
-            "trait_impls" => {
-                println!("{} trait implementations ({} total)", section_prefix, section_count);
-                if depth >= 2 {
-                    print_trait_impls_tree(&trait_impls_by_target, child_prefix, depth);
-                }
-            }
-            "compiler" => {
-                println!("{} compiler ({} entries)", section_prefix, section_count);
-                if depth >= 2 {
-                    print_compiler_tree(&compiler, child_prefix, depth);
-                }
-            }
-            "system" => {
-                println!("{} system ({} symbols)", section_prefix, section_count);
-                if depth >= 2 {
-                    print_system_tree(&system_by_type, child_prefix, depth);
-                }
-            }
-            "unknown" => {
-                println!("{} unknown ({} symbols)", section_prefix, unknown.len());
-                if depth >= 3 {
-                    print_symbols_tree(&unknown, &format!("{}    ", child_prefix));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    Ok(())
-}
-
-fn print_filtered_category(
-    binary_path: &Path,
-    symbols_by_category: &BTreeMap<SymbolCategory, Vec<Symbol>>,
-    filter_name: &str,
-    depth: Option<u32>,
-) -> Result<()> {
-    let mut found = false;
-    for (category, symbols) in symbols_by_category {
-        if category.to_string().contains(filter_name) {
-            println!("{}", binary_path.display());
-            println!("└── {} ({} symbols)", category, symbols.len());
-            
-            if depth.unwrap_or(2) >= 2 {
-                print_symbols_tree(symbols, "    ");
-            }
-            
-            found = true;
-            break;
-        }
-    }
-
-    if !found {
-        println!("Category '{}' not found", filter_name);
-        println!("Available categories:");
-        for category in symbols_by_category.keys() {
-            println!("  {}", category);
-        }
-    }
-    
-    Ok(())
-}
-
-fn print_crates_tree(crates: &[(String, Vec<Symbol>)], prefix: &str, depth: u32) {
-    for (i, (name, symbols)) in crates.iter().enumerate() {
-        let is_last = i == crates.len() - 1;
-        let item_prefix = if is_last { "└──" } else { "├──" };
-        let child_prefix = if is_last { "    " } else { "│   " };
-        
-        println!("{}{} {} ({} symbols)", prefix, item_prefix, name, symbols.len());
-        
-        if depth >= 3 {
-            print_symbols_tree(symbols, &format!("{}{}", prefix, child_prefix));
+    /// Get the count of symbols in this tree
+    pub fn symbol_count(&self) -> usize {
+        match self {
+            Tree::Leaf(_) => 1,
+            Tree::Node(children) => children.values().map(|child| child.symbol_count()).sum(),
         }
     }
 }
 
-fn print_trait_impls_tree(
-    trait_impls: &BTreeMap<String, Vec<(String, usize)>>,
-    prefix: &str,
-    depth: u32,
-) {
-    let targets: Vec<_> = trait_impls.keys().collect();
-    for (i, target_crate) in targets.iter().enumerate() {
-        let is_last = i == targets.len() - 1;
-        let item_prefix = if is_last { "└──" } else { "├──" };
-        let child_prefix = if is_last { "    " } else { "│   " };
-        
-        let impls = &trait_impls[*target_crate];
-        let total_symbols: usize = impls.iter().map(|(_, count)| count).sum();
-        
-        println!("{}{} {} ({} impls, {} symbols)", 
-                prefix, item_prefix, target_crate, impls.len(), total_symbols);
-        
-        if depth >= 3 {
-            for (j, (trait_name, symbol_count)) in impls.iter().enumerate() {
-                let is_last_impl = j == impls.len() - 1;
-                let impl_prefix = if is_last_impl { "└──" } else { "├──" };
-                println!("{}{}{}  {} ({} symbols)", prefix, child_prefix, impl_prefix, trait_name, symbol_count);
-            }
-        }
-    }
-}
-
-fn print_compiler_tree(compiler: &[(String, Vec<Symbol>)], prefix: &str, depth: u32) {
-    for (i, (name, symbols)) in compiler.iter().enumerate() {
-        let is_last = i == compiler.len() - 1;
-        let item_prefix = if is_last { "└──" } else { "├──" };
-        let child_prefix = if is_last { "    " } else { "│   " };
-        
-        println!("{}{} {} ({} symbols)", prefix, item_prefix, name, symbols.len());
-        
-        if depth >= 3 {
-            print_symbols_tree(symbols, &format!("{}{}", prefix, child_prefix));
-        }
-    }
-}
-
-fn print_system_tree(
-    system_by_type: &BTreeMap<SystemSymbolType, Vec<Symbol>>,
-    prefix: &str,
-    depth: u32,
-) {
-    // Since we put all system symbols under one key, get all symbols and group them by dot-prefix
-    if let Some(all_system_symbols) = system_by_type.get(&SystemSymbolType::Other("system".to_string())) {
-        let grouped_symbols = group_symbols_by_dot_prefix(all_system_symbols);
-        print_grouped_symbols_tree(&grouped_symbols, prefix, depth);
-    }
-}
-
-fn group_symbols_by_dot_prefix(symbols: &[Symbol]) -> BTreeMap<String, Vec<Symbol>> {
+fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
     let mut grouped: BTreeMap<String, Vec<Symbol>> = BTreeMap::new();
-    
+
     for symbol in symbols {
-        let name = if symbol.is_demangled() {
-            &symbol.demangled
-        } else {
-            &symbol.mangled
-        };
-        
+        let name = &symbol.demangled;
+
         // Special handling for GCC_except_table symbols
         let prefix = if name.starts_with("GCC_except_table") {
             "GCC_except_table"
@@ -274,56 +45,222 @@ fn group_symbols_by_dot_prefix(symbols: &[Symbol]) -> BTreeMap<String, Vec<Symbo
         } else {
             name
         };
-        
-        grouped.entry(prefix.to_string()).or_default().push(symbol.clone());
+
+        grouped
+            .entry(prefix.to_string())
+            .or_default()
+            .push(symbol.clone());
     }
-    
+
+    // Convert grouped symbols to Tree nodes
     grouped
+        .into_iter()
+        .map(|(prefix, symbols)| {
+            let tree = if symbols.len() == 1 {
+                Tree::Leaf(symbols.into_iter().next().unwrap())
+            } else {
+                Tree::Node(
+                    symbols
+                        .into_iter()
+                        .map(|symbol| (symbol.demangled.clone(), Tree::Leaf(symbol)))
+                        .collect(),
+                )
+            };
+            (prefix, tree)
+        })
+        .collect()
 }
 
-fn print_grouped_symbols_tree(
-    grouped_symbols: &BTreeMap<String, Vec<Symbol>>,
-    prefix: &str,
-    depth: u32,
-) {
-    let prefixes: Vec<_> = grouped_symbols.keys().collect();
-    
-    for (i, group_prefix) in prefixes.iter().enumerate() {
-        let is_last = i == prefixes.len() - 1;
-        let item_prefix = if is_last { "└──" } else { "├──" };
-        let child_prefix = if is_last { "    " } else { "│   " };
-        
-        let symbols = &grouped_symbols[*group_prefix];
-        
-        if symbols.len() > 1 {
-            // Show group with count
-            println!("{}{} {}. ({} symbols)", prefix, item_prefix, group_prefix, symbols.len());
-            
-            if depth >= 4 {
-                // Show individual symbols within the group
-                print_symbols_tree(symbols, &format!("{}{}", prefix, child_prefix));
-            }
-        } else {
-            // Show single symbol directly
-            let symbol = &symbols[0];
-            if symbol.is_demangled() {
-                println!("{}{} {} ({})", prefix, item_prefix, symbol.demangled, symbol.mangled);
+/// Print a tree structure with proper indentation and tree characters
+fn print_tree(tree: &Tree, prefix: &str, max_depth: u32) {
+    match tree {
+        Tree::Leaf(symbol) => {
+            // TODO: add option to print mangled name
+            println!("{}└── {}", prefix, symbol.demangled);
+        }
+        Tree::Node(children) => {
+            if max_depth > 0 {
+                let child_entries: Vec<_> = children.iter().collect();
+                for (i, (name, child)) in child_entries.iter().enumerate() {
+                    let is_last = i == child_entries.len() - 1;
+                    let item_prefix = if is_last { "└──" } else { "├──" };
+                    let child_prefix = if is_last { "    " } else { "│   " };
+
+                    match child {
+                        Tree::Leaf(symbol) => {
+                            // TODO: add option to print mangled name
+                            println!("{}{} {}", prefix, item_prefix, symbol.demangled);
+                        }
+                        Tree::Node(_) => {
+                            let count = child.symbol_count();
+                            println!("{}{} {} ({} symbols)", prefix, item_prefix, name, count);
+
+                            // Only recurse if we haven't reached the max depth
+                            if max_depth > 1 {
+                                print_tree(
+                                    child,
+                                    &format!("{}{}", prefix, child_prefix),
+                                    max_depth - 1,
+                                );
+                            }
+                        }
+                    }
+                }
             } else {
-                println!("{}{} {}", prefix, item_prefix, symbol.mangled);
+                // Show count only when max depth is reached
+                let total_symbols = tree.symbol_count();
+                println!("{}└── ({} symbols)", prefix, total_symbols);
             }
         }
     }
 }
 
-fn print_symbols_tree(symbols: &[Symbol], prefix: &str) {
-    for (i, symbol) in symbols.iter().enumerate() {
-        let is_last = i == symbols.len() - 1;
-        let item_prefix = if is_last { "└──" } else { "├──" };
-        
-        if symbol.is_demangled() {
-            println!("{}{} {} ({})", prefix, item_prefix, symbol.demangled, symbol.mangled);
-        } else {
-            println!("{}{} {}", prefix, item_prefix, symbol.mangled);
+fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
+    let mut symbols_by_category: BTreeMap<SymbolCategory, Vec<Symbol>> = BTreeMap::new();
+
+    for sym in symbols {
+        symbols_by_category
+            .entry(sym.category.clone())
+            .or_default()
+            .push(sym.clone());
+    }
+
+    // Build the complete tree structure
+    let mut root_children = BTreeMap::new();
+
+    // Group symbols by category type
+    let mut crates = Vec::new();
+    let mut trait_impls = Vec::new();
+    let mut compiler = Vec::new();
+    let mut system_symbols = Vec::new();
+    let mut unknown = Vec::new();
+
+    for (category, symbols) in symbols_by_category {
+        match category {
+            SymbolCategory::Crate(_) => {
+                crates.extend(symbols);
+            }
+            SymbolCategory::TraitImpl {
+                trait_for: _,
+                target_crate: _,
+            } => {
+                trait_impls.extend(symbols);
+            }
+            SymbolCategory::Compiler(_) => {
+                compiler.extend(symbols);
+            }
+            SymbolCategory::System(_) => {
+                system_symbols.extend(symbols);
+            }
+            SymbolCategory::Unknown => {
+                unknown.extend(symbols);
+            }
+        }
+    }
+
+    // Add each category as a top-level tree node
+    if !crates.is_empty() {
+        root_children.insert(
+            "crates".to_string(),
+            create_category_tree("crates", &crates),
+        );
+    }
+
+    if !trait_impls.is_empty() {
+        root_children.insert(
+            "trait_impls".to_string(),
+            create_category_tree("trait_impls", &trait_impls),
+        );
+    }
+
+    if !compiler.is_empty() {
+        root_children.insert(
+            "compiler".to_string(),
+            create_category_tree("compiler", &compiler),
+        );
+    }
+
+    if !system_symbols.is_empty() {
+        // Use the specialized grouping for system symbols
+        root_children.insert("system".to_string(), Tree::from_symbols(&system_symbols));
+    }
+
+    if !unknown.is_empty() {
+        root_children.insert(
+            "unknown".to_string(),
+            create_category_tree("unknown", &unknown),
+        );
+    }
+
+    Tree::Node(root_children)
+}
+
+pub fn print_symbols(
+    binary_path: &Path,
+    symbols: Vec<Symbol>,
+    options: PrintOptions,
+) -> Result<()> {
+    let depth = options.depth;
+
+    if depth == 0 {
+        let total_symbols = symbols.len();
+        println!("{}", binary_path.display());
+        println!("└── {} total symbols", total_symbols);
+        return Ok(());
+    }
+
+    let tree = tree_from_symbols(&symbols);
+
+    // Print the file path as root
+    println!("{}", binary_path.display());
+
+    // Print the entire tree using the single print_tree function
+    print_tree(&tree, "", depth);
+
+    Ok(())
+}
+
+// Helper function to create a Tree from category data with hierarchical parsing
+fn create_category_tree(_name: &str, symbols: &[Symbol]) -> Tree {
+    let mut root = BTreeMap::new();
+
+    for symbol in symbols {
+        let name = &symbol.demangled;
+
+        // Split by :: to create hierarchical structure
+        let parts: Vec<&str> = name.split("::").collect();
+        insert_symbol_into_tree(&mut root, &parts, symbol.clone());
+    }
+
+    Tree::Node(root)
+}
+
+// Recursively insert a symbol into the tree based on its path parts
+fn insert_symbol_into_tree(
+    current_node: &mut BTreeMap<String, Tree>,
+    parts: &[&str],
+    symbol: Symbol,
+) {
+    if parts.is_empty() {
+        return;
+    }
+
+    if parts.len() == 1 {
+        // This is a leaf node - use the demangled symbol name as key
+        current_node.insert(symbol.demangled.clone(), Tree::Leaf(symbol));
+    } else {
+        // This is an intermediate node - recurse deeper
+        let current_part = parts[0].to_string();
+        let remaining_parts = &parts[1..];
+
+        // Get or create the child node
+        let child_node = current_node
+            .entry(current_part)
+            .or_insert_with(|| Tree::Node(BTreeMap::new()));
+
+        // Recurse into the child node
+        if let Tree::Node(child_map) = child_node {
+            insert_symbol_into_tree(child_map, remaining_parts, symbol);
         }
     }
 }
