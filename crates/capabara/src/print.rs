@@ -115,84 +115,63 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32) {
     }
 }
 
-fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
-    let mut symbols_by_category: BTreeMap<SymbolCategory, Vec<Symbol>> = BTreeMap::new();
-
-    for sym in symbols {
-        symbols_by_category
-            .entry(sym.category.clone())
-            .or_default()
-            .push(sym.clone());
+fn get_or_create_category<'a>(
+    root: &'a mut BTreeMap<String, Tree>,
+    name: impl Into<String>,
+) -> &'a mut BTreeMap<String, Tree> {
+    let category = root
+        .entry(name.into())
+        .or_insert_with(|| Tree::Node(BTreeMap::new()));
+    if let Tree::Node(children) = category {
+        children
+    } else {
+        unreachable!("Category should always be a Node")
     }
+}
 
-    // Build the complete tree structure
-    let mut root_children = BTreeMap::new();
+fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
+    let mut root = BTreeMap::new();
 
-    // Group symbols by category type
-    let mut crates = Vec::new();
-    let mut trait_impls = Vec::new();
-    let mut compiler = Vec::new();
-    let mut system_symbols = Vec::new();
-    let mut unknown = Vec::new();
-
-    for (category, symbols) in symbols_by_category {
-        match category {
+    for symbol in symbols {
+        match &symbol.category {
             SymbolCategory::Crate(_) => {
-                crates.extend(symbols);
+                let category = get_or_create_category(&mut root, "crates");
+                tree_from_symbol(category, symbol);
             }
             SymbolCategory::TraitImpl {
                 trait_for: _,
-                target_crate: _,
+                target_crate,
             } => {
-                trait_impls.extend(symbols);
+                let category = get_or_create_category(&mut root, "trait_impls");
+                let subcategory = get_or_create_category(category, target_crate);
+                tree_from_symbol(subcategory, symbol);
             }
             SymbolCategory::Compiler(_) => {
-                compiler.extend(symbols);
+                let category = get_or_create_category(&mut root, "compiler");
+                tree_from_symbol(category, symbol);
             }
             SymbolCategory::System(_) => {
-                system_symbols.extend(symbols);
+                let category = get_or_create_category(&mut root, "system");
+                let name = &symbol.demangled;
+                let system_category = if name.starts_with("GCC_except_table") {
+                    "GCC_except_table"
+                } else if let Some(dot_pos) = name.find('.') {
+                    // Extract prefix before first dot, or use the entire name if no dot
+                    &name[..dot_pos]
+                } else {
+                    name
+                };
+                let sub_category = get_or_create_category(category, system_category);
+                tree_from_symbol(sub_category, symbol);
             }
             SymbolCategory::Unknown => {
-                unknown.extend(symbols);
+                let category = get_or_create_category(&mut root, "unknown");
+                tree_from_symbol(category, symbol);
             }
         }
     }
 
-    // Add each category as a top-level tree node
-    if !crates.is_empty() {
-        root_children.insert(
-            "crates".to_string(),
-            create_category_tree("crates", &crates),
-        );
-    }
-
-    if !trait_impls.is_empty() {
-        root_children.insert(
-            "trait_impls".to_string(),
-            create_category_tree("trait_impls", &trait_impls),
-        );
-    }
-
-    if !compiler.is_empty() {
-        root_children.insert(
-            "compiler".to_string(),
-            create_category_tree("compiler", &compiler),
-        );
-    }
-
-    if !system_symbols.is_empty() {
-        // Use the specialized grouping for system symbols
-        root_children.insert("system".to_string(), Tree::from_symbols(&system_symbols));
-    }
-
-    if !unknown.is_empty() {
-        root_children.insert(
-            "unknown".to_string(),
-            create_category_tree("unknown", &unknown),
-        );
-    }
-
-    Tree::Node(root_children)
+    Tree::Node(root)
 }
 
 pub fn print_symbols(
@@ -220,19 +199,10 @@ pub fn print_symbols(
     Ok(())
 }
 
-// Helper function to create a Tree from category data with hierarchical parsing
-fn create_category_tree(_name: &str, symbols: &[Symbol]) -> Tree {
-    let mut root = BTreeMap::new();
-
-    for symbol in symbols {
-        let name = &symbol.demangled;
-
-        // Split by :: to create hierarchical structure
-        let parts: Vec<&str> = name.split("::").collect();
-        insert_symbol_into_tree(&mut root, &parts, symbol.clone());
-    }
-
-    Tree::Node(root)
+fn tree_from_symbol(root: &mut BTreeMap<String, Tree>, symbol: &Symbol) {
+    // Split by :: to create hierarchical structure
+    let parts: Vec<&str> = symbol.demangled.split("::").collect();
+    insert_symbol_into_tree(root, &parts, symbol.clone());
 }
 
 // Recursively insert a symbol into the tree based on its path parts
