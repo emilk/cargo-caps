@@ -1,6 +1,9 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::Parser;
-use std::path::PathBuf;
+
+use capabara::print::PrintOptions;
 
 #[derive(Parser)]
 #[command(name = "capabara")]
@@ -25,6 +28,15 @@ fn main() -> Result<()> {
         anyhow::bail!("Binary file does not exist: {}", args.binary_path.display());
     }
 
-    capabara::extract_symbols(&args.binary_path, args.verbose, args.module.as_deref())?;
+    let symbols = capabara::extract_symbols(&args.binary_path)?;
+    let options = {
+        let verbose = args.verbose;
+        let filter_module = args.module.as_deref();
+        PrintOptions {
+            verbose,
+            filter_module,
+        }
+    };
+    capabara::print::print_symbols(&args.binary_path, symbols, options)?;
     Ok(())
 }

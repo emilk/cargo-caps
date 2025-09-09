@@ -11,4 +11,6 @@ Run capabara on self:
 ```
 
 ## Warning
-This is a vibe-coded experiment
+This is a vibe-coded experiment.
+
+Only tested on macOS.

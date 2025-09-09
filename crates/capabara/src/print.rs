@@ -1,77 +1,38 @@
-use anyhow::{Context, Result};
-use object::{Object, ObjectSymbol};
-use std::collections::BTreeMap;
-use std::fs;
-use std::io::{Cursor, Read};
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
-use crate::{Symbol, SymbolCategory};
+use anyhow::Result;
 
-/// Check if a file is an rlib archive
-pub fn is_rlib(path: &Path) -> Result<bool> {
-    let data = fs::read(path).context("Failed to read file")?;
-    
-    // Check if it's an ar archive (rlib files are ar archives)
-    Ok(data.starts_with(b"!<arch>\n"))
+use crate::symbol::{Symbol, SymbolCategory, SystemSymbolType};
+
+pub struct PrintOptions<'a> {
+    pub verbose: bool,
+    pub filter_module: Option<&'a str>,
 }
 
-/// Extract and analyze symbols from an rlib file
-pub fn extract_rlib_symbols(
+pub fn print_symbols(
     binary_path: &Path,
-    verbose: bool,
-    filter_module: Option<&str>,
+    symbols: Vec<Symbol>,
+    options: PrintOptions,
 ) -> Result<()> {
-    let data = fs::read(binary_path)
-        .with_context(|| format!("Failed to read rlib file: {}", binary_path.display()))?;
+    let mut symbols_by_category: BTreeMap<SymbolCategory, Vec<Symbol>> = BTreeMap::new();
 
-    let mut archive = ar::Archive::new(Cursor::new(data));
-    let mut all_symbols: BTreeMap<SymbolCategory, Vec<Symbol>> = BTreeMap::new();
-
-    // Extract and process each object file in the archive
-    while let Some(entry_result) = archive.next_entry() {
-        let mut entry = entry_result.context("Failed to read archive entry")?;
-        
-        // Skip non-object files (like metadata files)
-        let header = entry.header();
-        let filename = String::from_utf8_lossy(header.identifier());
-        
-        if !filename.ends_with(".o") {
-            continue;
-        }
-
-        // Read the object file data
-        let mut obj_data = Vec::new();
-        entry.read_to_end(&mut obj_data)
-            .context("Failed to read object file from archive")?;
-
-        // Parse the object file and extract symbols
-        if let Ok(file) = object::File::parse(&*obj_data) {
-            for symbol in file.symbols() {
-                if let Ok(name) = symbol.name() {
-                    if !name.is_empty() {
-                        let sym = Symbol::from_mangled(name.to_string());
-                        all_symbols
-                            .entry(sym.category.clone())
-                            .or_default()
-                            .push(sym);
-                    }
-                }
-            }
-        }
+    for sym in symbols {
+        symbols_by_category
+            .entry(sym.category.clone())
+            .or_default()
+            .push(sym);
     }
 
-    // Use the same output logic as the main extract_symbols function
-    output_symbols(binary_path, all_symbols, verbose, filter_module)
+    print_symbols_by_category(binary_path, symbols_by_category, options)
 }
 
-fn output_symbols(
+fn print_symbols_by_category(
     binary_path: &Path,
     symbols_by_category: BTreeMap<SymbolCategory, Vec<Symbol>>,
-    verbose: bool,
-    filter_module: Option<&str>,
+    options: PrintOptions,
 ) -> Result<()> {
     // Filter to specific category if requested
-    if let Some(filter_name) = filter_module {
+    if let Some(filter_name) = options.filter_module {
         let mut found = false;
         for (category, symbols) in &symbols_by_category {
             if category.to_string().contains(filter_name) {
@@ -96,7 +57,7 @@ fn output_symbols(
         }
 
         if !found {
-            println!("Category '{}' not found in rlib", filter_name);
+            println!("Category '{}' not found", filter_name);
             println!();
             println!("Available categories:");
             // Show available categories for reference
@@ -106,7 +67,7 @@ fn output_symbols(
                 println!("  {}", name);
             }
         }
-    } else if verbose {
+    } else if options.verbose {
         println!("Symbols in {} grouped by category:", binary_path.display());
         println!();
 
@@ -196,11 +157,11 @@ fn output_symbols(
             for (sys_type, symbol_counts) in &system_by_type {
                 let total_symbols: usize = symbol_counts.iter().sum();
                 match sys_type {
-                    crate::SystemSymbolType::OutlinedFunctions => outlined_total += total_symbols,
-                    crate::SystemSymbolType::StubHelpers => stub_helpers_total += total_symbols,
-                    crate::SystemSymbolType::LibraryFunctions => library_functions_total += total_symbols,
-                    crate::SystemSymbolType::Symbols => symbols_total += total_symbols,
-                    crate::SystemSymbolType::Other(_) => other_total += total_symbols,
+                    SystemSymbolType::OutlinedFunctions => outlined_total += total_symbols,
+                    SystemSymbolType::StubHelpers => stub_helpers_total += total_symbols,
+                    SystemSymbolType::LibraryFunctions => library_functions_total += total_symbols,
+                    SystemSymbolType::Symbols => symbols_total += total_symbols,
+                    SystemSymbolType::Other(_) => other_total += total_symbols,
                 }
             }
 

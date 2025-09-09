@@ -1,392 +1,73 @@
+use std::{
+    fs,
+    io::{Cursor, Read as _},
+    path::Path,
+};
+
 use anyhow::{Context, Result};
 use object::{Object, ObjectSymbol};
-use std::collections::BTreeMap;
-use std::fmt;
-use std::fs;
-use std::path::Path;
 
-pub mod rlib;
+use crate::symbol::Symbol;
 
-fn demangle_symbol(name: &str) -> String {
-    if let Ok(demangled) = cpp_demangle::Symbol::new(name) {
-        return decode_rust_type(&demangled.to_string());
-    }
+pub mod demangle;
+pub mod print;
+pub mod symbol;
 
-    if let Ok(demangled) = rustc_demangle::try_demangle(name) {
-        return decode_rust_type(&demangled.to_string());
-    }
+/// Extact symbols from an executable or an .rlib.
+pub fn extract_symbols(binary_path: &Path) -> Result<Vec<Symbol>> {
+    let file_bytes = fs::read(binary_path)
+        .with_context(|| format!("Failed to read {}", binary_path.display()))?;
 
-    decode_rust_type(name)
-}
+    // Check if it's an ar archive (rlib files are ar archives)
+    let is_ar_archive = file_bytes.starts_with(b"!<arch>\n");
 
-#[derive(Debug, Clone)]
-pub struct Symbol {
-    pub mangled: String,
-    pub demangled: String,
-    pub category: SymbolCategory,
-}
+    let mut symbols = Vec::new();
 
-impl Symbol {
-    pub fn from_mangled(mangled: String) -> Self {
-        let demangled = demangle_symbol(&mangled);
-        let category = classify_symbol(&demangled, &mangled);
-        Self {
-            mangled,
-            demangled,
-            category,
-        }
-    }
+    if is_ar_archive {
+        // .rlib
+        let mut archive = ar::Archive::new(Cursor::new(file_bytes));
 
-    pub fn is_demangled(&self) -> bool {
-        self.mangled != self.demangled
-    }
-}
+        // Extract and process each object file in the archive
+        while let Some(entry_result) = archive.next_entry() {
+            let mut entry = entry_result.context("Failed to read archive entry")?;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SymbolCategory {
-    Crate(String),
-    TraitImpl {
-        trait_for: String,
-        target_crate: String,
-    },
-    Compiler(String),
-    System(SystemSymbolType),
-    Unknown,
-}
+            // Skip non-object files (like metadata files)
+            let header = entry.header();
+            let filename = String::from_utf8_lossy(header.identifier());
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SystemSymbolType {
-    OutlinedFunctions,
-    StubHelpers,
-    LibraryFunctions,
-    Symbols,
-    Other(String),
-}
-
-impl fmt::Display for SymbolCategory {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SymbolCategory::Crate(name) => write!(f, "{}", name),
-            SymbolCategory::TraitImpl {
-                trait_for,
-                target_crate,
-            } => {
-                write!(f, "trait_impl: {} → {}", trait_for, target_crate)
+            if !filename.ends_with(".o") {
+                continue;
             }
-            SymbolCategory::Compiler(name) => write!(f, "compiler: {}", name),
-            SymbolCategory::System(sys_type) => match sys_type {
-                SystemSymbolType::OutlinedFunctions => write!(f, "system: outlined functions"),
-                SystemSymbolType::StubHelpers => write!(f, "system: stub helpers"),
-                SystemSymbolType::LibraryFunctions => write!(f, "system: library functions"),
-                SystemSymbolType::Symbols => write!(f, "system: symbols"),
-                SystemSymbolType::Other(name) => write!(f, "system: {}", name),
-            },
-            SymbolCategory::Unknown => write!(f, "unknown"),
-        }
-    }
-}
 
-fn classify_symbol(demangled_symbol: &str, original_symbol: &str) -> SymbolCategory {
-    // Handle Rust symbols that were successfully demangled
-    if original_symbol != demangled_symbol
-        && let Some(first_colon) = demangled_symbol.find("::")
-    {
-        let first_part = &demangled_symbol[..first_colon];
+            // Read the object file data
+            let mut obj_data = Vec::new();
+            entry
+                .read_to_end(&mut obj_data)
+                .context("Failed to read object file from archive")?;
 
-        // Handle trait implementations like _<Type as crate..trait>::method
-        if first_part.starts_with("_<")
-            && first_part.contains(" as ")
-            && let Some(as_pos) = first_part.find(" as ")
-        {
-            let trait_for = &first_part[2..as_pos]; // Skip "_<"
-            let remaining = &first_part[as_pos + 4..]; // Skip " as "
-
-            // Extract target crate from the remaining part
-            let target_crate = if let Some(dot_dot) = remaining.find("..") {
-                &remaining[..dot_dot]
-            } else if let Some(gt_pos) = remaining.find(">") {
-                &remaining[..gt_pos]
+            // Parse the object file and extract symbols
+            if let Ok(file) = object::File::parse(&*obj_data) {
+                collect_file_symbols(&mut symbols, &file);
             } else {
-                remaining
-            };
-
-            return SymbolCategory::TraitImpl {
-                trait_for: trait_for.to_string(),
-                target_crate: target_crate.to_string(),
-            };
+                // TODO: Return error
+            }
         }
-
-        // Handle compiler-generated symbols
-        if first_part.starts_with("__rustc[") {
-            return SymbolCategory::Compiler("rustc".to_string());
-        }
-
-        // Regular crate symbol
-        return SymbolCategory::Crate(first_part.to_string());
+    } else {
+        // Assume an executable
+        let file =
+            object::File::parse(&*file_bytes).with_context(|| "Failed to parse binary file")?;
+        collect_file_symbols(&mut symbols, &file);
     }
 
-    // Handle undemangled but potentially Rust symbols
-    if original_symbol.starts_with('_') && original_symbol.contains("::") {
-        return SymbolCategory::Unknown; // Could be Rust but failed to demangle
-    }
-
-    // System/C symbols - classify by pattern
-    let sys_type = SystemSymbolType::from_symbol(original_symbol);
-    SymbolCategory::System(sys_type)
+    Ok(symbols)
 }
 
-impl SystemSymbolType {
-    fn from_symbol(symbol: &str) -> Self {
-        if symbol.starts_with("_OUTLINED_FUNCTION_") {
-            SystemSymbolType::OutlinedFunctions
-        } else if symbol.contains("stub_helper") {
-            SystemSymbolType::StubHelpers
-        } else if symbol.starts_with('_')
-            && (symbol.contains("printf")
-                || symbol.contains("malloc")
-                || symbol.contains("free")
-                || symbol.contains("memcpy")
-                || symbol.contains("strlen")
-                || symbol.contains("strcmp")
-                || symbol.contains("pthread")
-                || symbol.starts_with("_lib")
-                || symbol.starts_with("_LC_")
-                || symbol.contains("objc_")
-                || symbol.contains("dyld_"))
-        {
-            SystemSymbolType::LibraryFunctions
-        } else if symbol.starts_with('_')
-            && (symbol.contains("GLOBAL_OFFSET_TABLE")
-                || symbol.contains("_data")
-                || symbol.contains("_bss")
-                || symbol.contains("_text")
-                || symbol.starts_with("_l")
-                || symbol.starts_with("_L"))
-        {
-            SystemSymbolType::Symbols
-        } else {
-            SystemSymbolType::Other(symbol.to_string())
-        }
-    }
-}
-
-fn decode_rust_type(encoded: &str) -> String {
-    encoded
-        .replace("$BP$", "*")
-        .replace("$RF$", "&")
-        .replace("$LP$", "(")
-        .replace("$RP$", ")")
-        .replace("$u5b$", "[")
-        .replace("$u5d$", "]")
-        .replace("$u20$", " ")
-        .replace("$LT$", "<")
-        .replace("$GT$", ">")
-        .replace("$C$", ",")
-}
-
-pub fn extract_symbols(
-    binary_path: &Path,
-    verbose: bool,
-    filter_module: Option<&str>,
-) -> Result<()> {
-    // Check if this is an rlib file
-    if rlib::is_rlib(binary_path)? {
-        return rlib::extract_rlib_symbols(binary_path, verbose, filter_module);
-    }
-
-    let data = fs::read(binary_path)
-        .with_context(|| format!("Failed to read binary file: {}", binary_path.display()))?;
-
-    let file = object::File::parse(&*data).with_context(|| "Failed to parse binary file")?;
-
-    let mut symbols_by_category: BTreeMap<SymbolCategory, Vec<Symbol>> = BTreeMap::new();
-
+fn collect_file_symbols(all_symbols: &mut Vec<Symbol>, file: &object::File<'_>) {
     for symbol in file.symbols() {
         if let Ok(name) = symbol.name()
             && !name.is_empty()
         {
-            let sym = Symbol::from_mangled(name.to_string());
-            symbols_by_category
-                .entry(sym.category.clone())
-                .or_default()
-                .push(sym);
+            all_symbols.push(Symbol::from_mangled(name.to_string()));
         }
     }
-
-    // Filter to specific category if requested
-    if let Some(filter_name) = filter_module {
-        let mut found = false;
-        for (category, symbols) in &symbols_by_category {
-            if category.to_string().contains(filter_name) {
-                println!(
-                    "Symbols in {} for category '{}':",
-                    binary_path.display(),
-                    filter_name
-                );
-                println!();
-                println!("=== {} ({} symbols) ===", category, symbols.len());
-
-                for symbol in symbols {
-                    if symbol.is_demangled() {
-                        println!("  {} ({})", symbol.demangled, symbol.mangled);
-                    } else {
-                        println!("  {}", symbol.mangled);
-                    }
-                }
-                found = true;
-                break;
-            }
-        }
-
-        if !found {
-            println!("Category '{}' not found in binary", filter_name);
-            println!();
-            println!("Available categories:");
-            // Show available categories for reference
-            let category_names: Vec<_> =
-                symbols_by_category.keys().map(|c| c.to_string()).collect();
-            for name in category_names {
-                println!("  {}", name);
-            }
-        }
-    } else if verbose {
-        println!("Symbols in {} grouped by category:", binary_path.display());
-        println!();
-
-        for (category, symbols) in symbols_by_category {
-            println!("=== {} ({} symbols) ===", category, symbols.len());
-
-            for symbol in symbols {
-                if symbol.is_demangled() {
-                    println!("  {} ({})", symbol.demangled, symbol.mangled);
-                } else {
-                    println!("  {}", symbol.mangled);
-                }
-            }
-            println!();
-        }
-    } else {
-        println!("Symbol categories found in {}:", binary_path.display());
-        println!();
-
-        // Separate different types of categories
-        let mut crates = Vec::new();
-        let mut trait_impls_by_target = BTreeMap::new();
-        let mut compiler = Vec::new();
-        let mut system_by_type = BTreeMap::new();
-        let mut unknown = Vec::new();
-
-        for (category, symbols) in &symbols_by_category {
-            match category {
-                SymbolCategory::Crate(name) => crates.push((name.clone(), symbols.len())),
-                SymbolCategory::TraitImpl { target_crate, .. } => {
-                    trait_impls_by_target
-                        .entry(target_crate.clone())
-                        .or_insert_with(Vec::new)
-                        .push(symbols.len());
-                }
-                SymbolCategory::Compiler(name) => compiler.push((name.clone(), symbols.len())),
-                SymbolCategory::System(sys_type) => {
-                    system_by_type
-                        .entry(sys_type.clone())
-                        .or_insert_with(Vec::new)
-                        .push(symbols.len());
-                }
-                SymbolCategory::Unknown => unknown.push(("unknown".to_string(), symbols.len())),
-            }
-        }
-
-        // Print crates
-        println!("# Crates ({}):", crates.len());
-        crates.sort();
-        for (name, count) in &crates {
-            println!("  {} ({} symbols)", name, count);
-        }
-
-        // Print trait implementations grouped by target crate
-        if !trait_impls_by_target.is_empty() {
-            println!();
-            println!("# Trait implementations by target crate:");
-            for (target_crate, symbol_counts) in &trait_impls_by_target {
-                let total_symbols: usize = symbol_counts.iter().sum();
-                let impl_count = symbol_counts.len();
-                println!(
-                    "  trait_impl → {} ({} impls, {} symbols total)",
-                    target_crate, impl_count, total_symbols
-                );
-            }
-        }
-
-        // Print other categories
-        if !compiler.is_empty() {
-            println!();
-            println!("# Compiler:");
-            for (name, count) in &compiler {
-                println!("  {} ({} symbols)", name, count);
-            }
-        }
-
-        if !system_by_type.is_empty() {
-            println!();
-            println!("# System:");
-
-            let mut outlined_total = 0;
-            let mut stub_helpers_total = 0;
-            let mut library_functions_total = 0;
-            let mut symbols_total = 0;
-            let mut other_total = 0;
-
-            for (sys_type, symbol_counts) in &system_by_type {
-                let total_symbols: usize = symbol_counts.iter().sum();
-                match sys_type {
-                    SystemSymbolType::OutlinedFunctions => outlined_total += total_symbols,
-                    SystemSymbolType::StubHelpers => stub_helpers_total += total_symbols,
-                    SystemSymbolType::LibraryFunctions => library_functions_total += total_symbols,
-                    SystemSymbolType::Symbols => symbols_total += total_symbols,
-                    SystemSymbolType::Other(_) => other_total += total_symbols,
-                }
-            }
-
-            if outlined_total > 0 {
-                println!("  outlined functions ({} symbols)", outlined_total);
-            }
-            if stub_helpers_total > 0 {
-                println!("  stub helpers ({} symbols)", stub_helpers_total);
-            }
-            if library_functions_total > 0 {
-                println!("  library functions ({} symbols)", library_functions_total);
-            }
-            if symbols_total > 0 {
-                println!("  symbols ({} symbols)", symbols_total);
-            }
-            if other_total > 0 {
-                println!("  other ({} symbols)", other_total);
-            }
-        }
-
-        if !unknown.is_empty() {
-            println!();
-            println!("# Unknown:");
-            for (name, count) in &unknown {
-                println!("  {} ({} symbols)", name, count);
-            }
-        }
-
-        // Print summary
-        let total_symbols: usize = symbols_by_category.values().map(|v| v.len()).sum();
-
-        println!();
-        println!("# Summary:");
-        println!("  {} crates", crates.len());
-        println!(
-            "  {} trait implementations",
-            trait_impls_by_target
-                .values()
-                .map(|v| v.len())
-                .sum::<usize>()
-        );
-        println!("  {} total symbols", total_symbols);
-    }
-
-    Ok(())
 }
