@@ -7,6 +7,7 @@ use crate::symbol::{Symbol, SymbolCategory};
 pub struct PrintOptions {
     pub depth: u32,
     pub filter: Option<String>,
+    pub include_mangled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -108,8 +109,7 @@ fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
 }
 
 /// Print a tree structure with proper indentation and tree characters
-fn print_tree(tree: &Tree, prefix: &str, max_depth: u32) {
-    let include_mangled = true; // TODO: make a parameter
+fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, include_mangled: bool) {
     match tree {
         Tree::Leaf(symbol) => {
             println!("{}└── {}", prefix, symbol.format(include_mangled));
@@ -145,6 +145,7 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32) {
                                     child,
                                     &format!("{}{}", prefix, child_prefix),
                                     max_depth - 1,
+                                    include_mangled,
                                 );
                             }
                         }
@@ -178,14 +179,22 @@ fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
                 let category = get_or_create_category(&mut root, "crates");
                 tree_from_symbol(category, symbol);
             }
-            SymbolCategory::TraitImpl {
-                trait_for,
-                target_crate,
-            } => {
+            SymbolCategory::TraitImpl(trait_impl) => {
                 let category = get_or_create_category(&mut root, "trait_impls");
-                let category = get_or_create_category(category, target_crate);
-                let category = get_or_create_category(category, trait_for);
-                category.insert(symbol.demangled.clone(), Tree::Leaf(symbol.clone()));
+
+                // How do we categorize this?
+                // This could be `impl ForeignTrait for LocalType`
+                // or `impl LocalTrait for ForeignType`
+                // or `impl LocalTrait for LocalType`.
+                // The trait should always be namespaced to some crate,
+                // but the type can be a built-in like `[T]` or `i32`.
+                // let category = get_or_create_category(category, type_name);
+                // let category = get_or_create_category(category, trait_name);
+                let category = get_or_create_category(category, trait_impl.crate_bucket());
+
+                let mut symbol = symbol.clone();
+                symbol.demangled = trait_impl.to_string();
+                category.insert(symbol.demangled.clone(), Tree::Leaf(symbol));
             }
             SymbolCategory::Compiler(_) => {
                 let category = get_or_create_category(&mut root, "compiler");
@@ -285,7 +294,7 @@ pub fn print_symbols(
     println!("{}", display_path);
 
     // Print the entire tree using the single print_tree function
-    print_tree(&tree, "", depth);
+    print_tree(&tree, "", depth, options.include_mangled);
 
     Ok(())
 }

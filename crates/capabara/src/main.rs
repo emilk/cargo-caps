@@ -19,6 +19,10 @@ struct Args {
     /// Filter to show only symbols under the given tree path (e.g., "crates/std/sync")
     #[arg(short, long)]
     filter: Option<String>,
+
+    /// Include mangled symbol names alongside demangled names
+    #[arg(short = 'm', long, default_value = "false")]
+    mangled: bool,
 }
 
 fn main() -> Result<()> {
@@ -32,6 +36,7 @@ fn main() -> Result<()> {
     let options = PrintOptions {
         depth: args.depth,
         filter: args.filter,
+        include_mangled: args.mangled,
     };
     capabara::print::print_symbols(&args.binary_path, symbols, options)?;
     Ok(())

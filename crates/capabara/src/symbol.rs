@@ -32,13 +32,99 @@ impl Symbol {
     }
 }
 
+/// `<typename as traitname>::functioname`
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TraitFnImpl {
+    /// Could be a built-in type!
+    /// Could also start with `&` for references
+    pub type_name: String,
+
+    pub trait_name: String,
+    pub function_name: String,
+}
+
+impl fmt::Display for TraitFnImpl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            type_name,
+            trait_name,
+            function_name,
+        } = self;
+        write!(f, "<{type_name} as {trait_name}>::{function_name}")
+    }
+}
+
+impl TraitFnImpl {
+    pub fn parse(demangled_symbol: &str) -> Result<Self, &'static str> {
+        // Handle trait implementations like _<Typename as Traitname>::functionname::hash
+        if let Some(first_colon) = demangled_symbol.find("::") {
+            let first_part = &demangled_symbol[..first_colon];
+            let remaining_after_first_colon = &demangled_symbol[first_colon + 2..];
+
+            if first_part.starts_with("_<")
+                && first_part.contains(" as ")
+                && first_part.ends_with(">")
+                && let Some(as_pos) = first_part.find(" as ")
+            {
+                let typename = &first_part[2..as_pos]; // Skip "_<"
+                let traitname_part = &first_part[as_pos + 4..first_part.len() - 1]; // Skip " as " and ">"
+
+                // Extract function name (everything before the next :: or hash)
+                let function_name = if let Some(next_colon) = remaining_after_first_colon.find("::")
+                {
+                    &remaining_after_first_colon[..next_colon]
+                } else {
+                    remaining_after_first_colon
+                };
+
+                // Normalize by replacing .. with ::
+                let normalized_typename = typename.replace("..", "::");
+                let normalized_traitname = traitname_part.replace("..", "::");
+
+                return Ok(TraitFnImpl {
+                    type_name: normalized_typename,
+                    trait_name: normalized_traitname,
+                    function_name: function_name.to_string(),
+                });
+            }
+        }
+
+        Err("Not a trait implementation symbol")
+    }
+
+    pub fn crate_bucket(&self) -> String {
+        let trait_crate = crate_of(&self.trait_name);
+        let type_crate = crate_of(&self.type_name);
+
+        match (trait_crate, type_crate) {
+            (Some(trait_crate), Some(type_crate)) if trait_crate == type_crate => {
+                trait_crate.to_string()
+            }
+            (Some(trait_crate), Some(type_crate)) => {
+                format!("<{type_crate}::… as {trait_crate}::…>")
+            }
+            (Some(trait_crate), None) => trait_crate.to_string(),
+            (None, Some(type_crate)) => type_crate.to_string(),
+            (None, None) => "unknown".to_string(),
+        }
+    }
+}
+
+/// Return what comes before the first `::`
+fn crate_of(path: &str) -> Option<&str> {
+    let path = path.trim_start_matches('&'); // Ignore references
+    let path = path.trim_start_matches("dyn "); // Ignore &dyn
+    if let Some(colon) = path.find("::") {
+        Some(&path[..colon])
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SymbolCategory {
     Crate(String),
-    TraitImpl {
-        trait_for: String,
-        target_crate: String,
-    },
+    TraitImpl(TraitFnImpl),
     Compiler(String),
     System(SystemSymbolType),
     Unknown,
@@ -57,11 +143,8 @@ impl fmt::Display for SymbolCategory {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SymbolCategory::Crate(name) => write!(f, "{}", name),
-            SymbolCategory::TraitImpl {
-                trait_for,
-                target_crate,
-            } => {
-                write!(f, "trait_impl: {} → {}", trait_for, target_crate)
+            SymbolCategory::TraitImpl(trait_impl) => {
+                write!(f, "trait_impl: {trait_impl}")
             }
             SymbolCategory::Compiler(name) => write!(f, "compiler: {}", name),
             SymbolCategory::System(sys_type) => match sys_type {
@@ -83,30 +166,9 @@ fn classify_symbol(demangled_symbol: &str, original_symbol: &str) -> SymbolCateg
     {
         let first_part = &demangled_symbol[..first_colon];
 
-        // Handle trait implementations like _<Type as crate..trait>::method
-        if first_part.starts_with("_<")
-            && first_part.contains(" as ")
-            && let Some(as_pos) = first_part.find(" as ")
-        {
-            let trait_for = &first_part[2..as_pos]; // Skip "_<"
-            let remaining = &first_part[as_pos + 4..]; // Skip " as "
-
-            // Extract target crate from the remaining part (handle both .. and > delimiters)
-            let target_crate = if let Some(dot_dot) = remaining.find("..") {
-                &remaining[..dot_dot]
-            } else if let Some(gt_pos) = remaining.find(">") {
-                &remaining[..gt_pos]
-            } else {
-                remaining
-            };
-
-            // Normalize trait_for by replacing .. with ::
-            let normalized_trait_for = trait_for.replace("..", "::");
-
-            return SymbolCategory::TraitImpl {
-                trait_for: normalized_trait_for,
-                target_crate: target_crate.to_string(),
-            };
+        // Try parsing as a trait implementation
+        if let Ok(trait_impl) = TraitFnImpl::parse(demangled_symbol) {
+            return SymbolCategory::TraitImpl(trait_impl);
         }
 
         // Handle compiler-generated symbols
