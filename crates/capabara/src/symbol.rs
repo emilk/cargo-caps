@@ -144,8 +144,8 @@ impl TraitFnImpl {
                 && first_part.ends_with(">")
                 && let Some(as_pos) = first_part.find(" as ")
             {
-                let typename = &first_part[2..as_pos]; // Skip "_<"
-                let traitname_part = &first_part[as_pos + 4..first_part.len() - 1]; // Skip " as " and ">"
+                let type_name = &first_part[2..as_pos]; // Skip "_<"
+                let trait_name = &first_part[as_pos + 4..first_part.len() - 1]; // Skip " as " and ">"
 
                 // Extract function name (everything before the next :: or hash)
                 let function_name = if let Some(next_colon) = remaining_after_first_colon.find("::")
@@ -155,13 +155,9 @@ impl TraitFnImpl {
                     remaining_after_first_colon
                 };
 
-                // Normalize by replacing .. with ::
-                let normalized_typename = typename.replace("..", "::");
-                let normalized_traitname = traitname_part.replace("..", "::");
-
                 return Ok(TraitFnImpl {
-                    type_name: normalized_typename,
-                    trait_name: normalized_traitname,
+                    type_name: normalize_type_path(type_name),
+                    trait_name: normalize_type_path(trait_name),
                     function_name: function_name.to_string(),
                 });
             }
@@ -169,50 +165,19 @@ impl TraitFnImpl {
 
         Err("Not a trait implementation symbol")
     }
-
-    pub fn trait_crate(&self) -> Option<&str> {
-        crate_of(&self.trait_name)
-    }
-
-    pub fn type_crate(&self) -> Option<&str> {
-        crate_of(&self.type_name)
-    }
-
-    pub fn crates(&self) -> Vec<&str> {
-        let mut crates = Vec::new();
-        if let Some(trait_crate) = self.trait_crate() {
-            crates.push(trait_crate);
-        }
-        if let Some(type_crate) = self.type_crate()
-            && Some(type_crate) != self.trait_crate()
-        {
-            crates.push(type_crate);
-        }
-        crates
-    }
-
-    pub fn crate_bucket(&self) -> String {
-        match (self.trait_crate(), self.type_crate()) {
-            (Some(trait_crate), Some(type_crate)) if trait_crate == type_crate => {
-                trait_crate.to_string()
-            }
-            (Some(trait_crate), Some(type_crate)) => {
-                format!("<{type_crate}::… as {trait_crate}::…>")
-            }
-            (Some(trait_crate), None) => trait_crate.to_string(),
-            (None, Some(type_crate)) => type_crate.to_string(),
-            (None, None) => "unknown".to_string(),
-        }
-    }
 }
 
-/// Return what comes before the first `::`
-fn crate_of(path: &str) -> Option<&str> {
-    let path = path.trim_start_matches('&'); // Ignore references
-    let path = path.trim_start_matches("dyn "); // Ignore &dyn
-    if let Some(colon) = path.find("::") {
-        Some(&path[..colon])
-    } else {
-        None
+fn normalize_type_path(path: &str) -> String {
+    strip_indirections(&path.replace("..", "::")).to_owned()
+}
+
+fn strip_indirections(path: &str) -> &str {
+    let prefixes = ["&", "mut", "const", "dyn", " "];
+
+    for prefix in prefixes {
+        if let Some(rest) = path.strip_prefix(prefix) {
+            return strip_indirections(rest);
+        }
     }
+    path
 }
