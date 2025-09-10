@@ -133,28 +133,14 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
         } else if let Ok(trait_impl) = TraitFnImpl::parse(demangled) {
             symbol.demangled = trait_impl.to_string();
 
-            // How do we categorize this?
-            // This could be `impl ForeignTrait for LocalType`
-            // or `impl LocalTrait for ForeignType`
-            // or `impl LocalTrait for LocalType`.
-            // The trait should always be namespaced to some crate,
-            // but the type can be a built-in like `[T]` or `i32`.
-
-            {
-                let trait_parts: Vec<&str> = trait_impl.trait_name.split("::").collect();
-                let crate_name = trait_parts[0];
-                let category = crate_category(&mut root, crate_name);
-                insert_symbol_into_tree(category, &trait_parts, symbol.clone());
-            }
-
-            {
-                let type_parts: Vec<&str> = trait_impl.type_name.split("::").collect();
-                if type_parts.len() == 1 {
+            for path in trait_impl.paths() {
+                let path_parts: Vec<&str> = path.split("::").collect();
+                if path_parts.len() == 1 {
                     // Probably a built-in type, like [T]
                 } else {
-                    let crate_name = type_parts[0];
+                    let crate_name = path_parts[0];
                     let category = crate_category(&mut root, crate_name);
-                    insert_symbol_into_tree(category, &type_parts, symbol.clone());
+                    insert_symbol_into_tree(category, &path_parts, symbol.clone());
                 }
             }
         } else if let Some(first_colon) = demangled.find("::") {

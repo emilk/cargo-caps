@@ -165,6 +165,24 @@ impl TraitFnImpl {
 
         Err("Not a trait implementation symbol")
     }
+
+    /// Path to a type or trait, e.g. `std::io::Write`
+    pub fn paths(&self) -> Vec<String> {
+        // How do we categorize this?
+        // This could be `impl ForeignTrait for LocalType`
+        // or `impl LocalTrait for ForeignType`
+        // or `impl LocalTrait for LocalType`.
+        // The trait should always be namespaced to some crate,
+        // but the type can be a built-in like `[T]` or `i32`.
+
+        let Self {
+            type_name,
+            trait_name,
+            function_name: _,
+        } = self;
+
+        vec![type_name.clone(), trait_name.clone()]
+    }
 }
 
 fn normalize_type_path(path: &str) -> String {
@@ -180,4 +198,20 @@ fn strip_indirections(path: &str) -> &str {
         }
     }
     path
+}
+
+#[test]
+fn test_parse_trait_impl() {
+    // TODO: handle recursive definitions like this one:
+    let input = "<<alloc::collections::btree::map::IntoIter<K,V,A> as core::ops::drop::Drop>::drop::DropGuard<K,V,A> as core::ops::drop::Drop>::drop";
+
+    let parsed = TraitFnImpl::parse(input).unwrap();
+    assert_eq!(
+        parsed.paths(),
+        vec![
+            "alloc::collections::btree::map::IntoIter<K,V,A>",
+            "core::ops::drop::Drop>::drop::DropGuard<K,V,A>",
+            "core::ops::drop::Drop",
+        ]
+    );
 }

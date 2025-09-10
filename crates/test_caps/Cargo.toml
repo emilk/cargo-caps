@@ -1,0 +1,36 @@
+[package]
+name = "test_caps"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+abort = []
+exit = []
+panic = []
+alloc = []
+time = []
+signal = []
+sysinfo = []
+stdio = []
+thread = []
+net = []
+fread = []
+fwrite = []
+all = [
+    "abort",
+    "exit",
+    "panic",
+    "alloc",
+    "time",
+    "signal",
+    "sysinfo",
+    "stdio",
+    "thread",
+    "net",
+    "fread",
+    "fwrite",
+]
+
+[dependencies]
