@@ -14,6 +14,7 @@ use crate::symbol::{Symbol, SymbolKind, SymbolScope};
 pub mod demangle;
 pub mod print;
 pub mod symbol;
+pub mod tree;
 
 /// Extact symbols from an executable or an .rlib.
 pub fn extract_symbols(binary_path: &Path) -> Result<Vec<Symbol>> {
