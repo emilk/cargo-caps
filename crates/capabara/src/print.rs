@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use anyhow::Result;
 
-use crate::symbol::{Symbol, SymbolCategory};
+use crate::symbol::{Symbol, TraitFnImpl};
 
 pub struct PrintOptions {
     pub depth: u32,
@@ -113,11 +113,7 @@ fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
 fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions) {
     match tree {
         Tree::Leaf(symbol) => {
-            println!(
-                "{}└── {}",
-                prefix,
-                symbol.format_with_metadata(options)
-            );
+            println!("{}└── {}", prefix, symbol.format_with_metadata(options));
         }
         Tree::Node(children) => {
             if max_depth == 0 {
@@ -179,63 +175,91 @@ fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
     let mut root = BTreeMap::new();
 
     for symbol in symbols {
-        match &symbol.category {
-            SymbolCategory::Crate(crate_name) => {
-                if ["core", "std"].contains(&crate_name.as_str()) {
-                    tree_from_symbol(&mut root, symbol);
+        let mut symbol = symbol.clone();
+        let demangled = &symbol.demangled;
+        if demangled.starts_with("__rustc[") {
+            let category = get_or_create_category(&mut root, "rustc");
+            // Example: '__rustc[5224e6b81cd82a8f]::__rust_alloc'
+            // Get part after `]::`:
+            if let Some(end_bracket) = demangled.find("]::") {
+                symbol.demangled = demangled[end_bracket + 3..].to_owned();
+                tree_from_symbol(category, &symbol);
+            } else {
+                tree_from_symbol(category, &symbol);
+            }
+        } else if let Ok(trait_impl) = TraitFnImpl::parse(demangled) {
+            symbol.demangled = trait_impl.to_string();
+
+            // How do we categorize this?
+            // This could be `impl ForeignTrait for LocalType`
+            // or `impl LocalTrait for ForeignType`
+            // or `impl LocalTrait for LocalType`.
+            // The trait should always be namespaced to some crate,
+            // but the type can be a built-in like `[T]` or `i32`.
+
+            {
+                let trait_parts: Vec<&str> = trait_impl.trait_name.split("::").collect();
+                let crate_name = trait_parts[0];
+                let category = crate_category(&mut root, crate_name);
+                insert_symbol_into_tree(category, &trait_parts, symbol.clone());
+            }
+
+            {
+                let type_parts: Vec<&str> = trait_impl.type_name.split("::").collect();
+                if type_parts.len() == 1 {
+                    // Probably a built-in type, like T
                 } else {
-                    let category = get_or_create_category(&mut root, "crates");
-                    tree_from_symbol(category, symbol);
+                    let crate_name = type_parts[0];
+                    let category = crate_category(&mut root, crate_name);
+                    insert_symbol_into_tree(category, &type_parts, symbol.clone());
                 }
             }
-            SymbolCategory::TraitImpl(trait_impl) => {
-                let category = get_or_create_category(&mut root, "trait_impls");
-
-                // How do we categorize this?
-                // This could be `impl ForeignTrait for LocalType`
-                // or `impl LocalTrait for ForeignType`
-                // or `impl LocalTrait for LocalType`.
-                // The trait should always be namespaced to some crate,
-                // but the type can be a built-in like `[T]` or `i32`.
-                // let category = get_or_create_category(category, type_name);
-                // let category = get_or_create_category(category, trait_name);
-                let category = get_or_create_category(category, trait_impl.crate_bucket());
-
-                let mut symbol = symbol.clone();
-                symbol.demangled = trait_impl.to_string();
-                category.insert(symbol.demangled.clone(), Tree::Leaf(symbol));
-            }
-            SymbolCategory::Compiler(_) => {
-                let category = get_or_create_category(&mut root, "compiler");
-                tree_from_symbol(category, symbol);
-            }
-            SymbolCategory::System(_) => {
-                let category = get_or_create_category(&mut root, "system");
-                let name = &symbol.demangled;
-                let system_category = if name.starts_with("GCC_except_table") {
-                    "GCC_except_table"
-                } else if name.starts_with("lCPI") {
-                    // local Constant Pool Identifier
-                    "lCPI"
-                } else if name.starts_with("ltmp") {
-                    "ltmp"
-                } else if let Some(dot_pos) = name.find('.') {
-                    // Extract prefix before first dot, or use the entire name if no dot
-                    &name[..dot_pos]
-                } else {
-                    name
-                };
-                let sub_category = get_or_create_category(category, system_category);
-                tree_from_symbol(sub_category, symbol);
-            }
-            SymbolCategory::Unknown => {
-                let category = get_or_create_category(&mut root, "unknown");
-                tree_from_symbol(category, symbol);
-            }
+        } else if let Some(first_colon) = demangled.find("::") {
+            let crate_name = &demangled[..first_colon];
+            add_crate_symbol(&mut root, crate_name, &symbol);
+        } else {
+            let category = get_or_create_category(&mut root, "system");
+            let name = &symbol.demangled;
+            let system_category = if name.starts_with("GCC_except_table") {
+                "GCC_except_table"
+            } else if name.starts_with("lCPI") {
+                // local Constant Pool Identifier
+                "lCPI"
+            } else if name.starts_with("ltmp") {
+                "ltmp"
+            } else if let Some(dot_pos) = name.find('.') {
+                // Extract prefix before first dot, or use the entire name if no dot
+                &name[..dot_pos]
+            } else {
+                name
+            };
+            let sub_category = get_or_create_category(category, system_category);
+            tree_from_symbol(sub_category, &symbol);
         }
     }
 
     Tree::Node(root)
+}
+
+fn crate_category(
+    root: &mut BTreeMap<String, Tree>,
+    crate_name: impl Into<String>,
+) -> &mut BTreeMap<String, Tree> {
+    let crate_name = crate_name.into();
+    if ["core", "std"].contains(&crate_name.as_str()) {
+        root
+    } else {
+        get_or_create_category(root, "crates")
+    }
+}
+
+fn add_crate_symbol(root: &mut BTreeMap<String, Tree>, crate_name: &str, symbol: &Symbol) {
+    if ["core", "std"].contains(&crate_name) {
+        tree_from_symbol(root, symbol);
+    } else {
+        let category = get_or_create_category(root, "crates");
+        tree_from_symbol(category, symbol);
+    }
 }
 
 fn filter_tree_by_path(tree: &Tree, path: &[&str]) -> Option<Tree> {
@@ -309,9 +333,7 @@ pub fn print_symbols(
 }
 
 fn tree_from_symbol(root: &mut BTreeMap<String, Tree>, symbol: &Symbol) {
-    // Normalize .. to :: for consistent hierarchical structure
-    let normalized_name = symbol.demangled.replace("..", "::");
-    let parts: Vec<&str> = normalized_name.split("::").collect();
+    let parts: Vec<&str> = symbol.demangled.split("::").collect();
     insert_symbol_into_tree(root, &parts, symbol.clone());
 }
 

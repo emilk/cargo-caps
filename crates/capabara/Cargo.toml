@@ -9,5 +9,6 @@ anyhow = "1.0"
 ar = "0.9"
 clap = { version = "4.0", features = ["derive"] }
 cpp_demangle = "0.4"
-object = "0.36"
+log-once = "0.4.1"
+object = "0.37.3"
 rustc-demangle = "0.1"
