@@ -113,7 +113,11 @@ fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
 fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions) {
     match tree {
         Tree::Leaf(symbol) => {
-            println!("{}└── {}", prefix, symbol.format_with_metadata(options.include_mangled, options.show_metadata));
+            println!(
+                "{}└── {}",
+                prefix,
+                symbol.format_with_metadata(options)
+            );
         }
         Tree::Node(children) => {
             if max_depth == 0 {
@@ -133,7 +137,7 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions)
                                 "{}{} {}",
                                 prefix,
                                 item_prefix,
-                                symbol.format_with_metadata(options.include_mangled, options.show_metadata)
+                                symbol.format_with_metadata(options)
                             );
                         }
                         Tree::Node(_) => {
@@ -176,9 +180,13 @@ fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
 
     for symbol in symbols {
         match &symbol.category {
-            SymbolCategory::Crate(_) => {
-                let category = get_or_create_category(&mut root, "crates");
-                tree_from_symbol(category, symbol);
+            SymbolCategory::Crate(crate_name) => {
+                if ["core", "std"].contains(&crate_name.as_str()) {
+                    tree_from_symbol(&mut root, symbol);
+                } else {
+                    let category = get_or_create_category(&mut root, "crates");
+                    tree_from_symbol(category, symbol);
+                }
             }
             SymbolCategory::TraitImpl(trait_impl) => {
                 let category = get_or_create_category(&mut root, "trait_impls");

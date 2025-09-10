@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::demangle::demangle_symbol;
+use crate::print::PrintOptions;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SymbolScope {
@@ -36,7 +37,8 @@ pub enum SymbolKind {
     /// The symbol is for executable code.
     Text,
 
-    /// The symbol is for a data object.
+    /// The symbol is for a data object,
+    /// e.g. string literals.
     Data,
 
     /// The symbol is for a section.
@@ -99,9 +101,9 @@ impl Symbol {
         }
     }
 
-    pub fn format_with_metadata(&self, include_mangled: bool, show_metadata: bool) -> String {
-        let base = self.format(include_mangled);
-        if show_metadata {
+    pub fn format_with_metadata(&self, options: &PrintOptions) -> String {
+        let base = self.format(options.include_mangled);
+        if options.show_metadata {
             let scope_str = self.scope.to_string();
             let kind_str = self.kind.to_string();
             format!("{base} [{scope_str}/{kind_str}]")
