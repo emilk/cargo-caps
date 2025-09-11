@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::{demangle::demangle_symbol, print::PrintOptions, rust_path::RustPath};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SymbolScope {
     /// Unknown scope.
     Unknown,
@@ -28,7 +28,7 @@ impl fmt::Display for SymbolScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SymbolKind {
     /// The symbol kind is unknown.
     Unknown,
@@ -66,8 +66,7 @@ impl fmt::Display for SymbolKind {
         }
     }
 }
-
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Symbol {
     pub mangled: String,
     pub demangled: String,
@@ -308,7 +307,7 @@ fn test_parse_trait_impl() {
     let tests = vec![
         (
             "__ZN66_$LT$std..io..cursor..Cursor$LT$T$GT$$u20$as$u20$std..io..Read$GT$4read17h3955760825c0713eE",
-            vec!["std::io::cursor::Cursor", "std::io::Read"],
+            vec!["std::io::cursor::Cursor<T>", "std::io::Read"],
         ),
         (
             "<std..io..cursor..Cursor<T> as std..io..Read>::read_exact",

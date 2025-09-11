@@ -21,7 +21,6 @@ Some that come to mind:
 - `panic` (anything in `std`, and some of `core`)
 - `alloc`
 - `time` - measuring time, telling current time
-- `signal` - installing signal handlers
 - `sysinfo` - reading environment variables, process info, …
 - `stdio`
 - `thread` - spawn threads
