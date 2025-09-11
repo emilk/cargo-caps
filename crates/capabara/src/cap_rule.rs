@@ -11,6 +11,16 @@ pub enum Match {
     StartsWith(String),
 }
 
+impl Match {
+    pub fn from_str(s: &str) -> Self {
+        if s.ends_with("::*") {
+            Match::StartsWith(s[..s.len() - 3].to_string())
+        } else {
+            Match::Exact(s.to_string())
+        }
+    }
+}
+
 pub struct Rule {
     /// If the symbol matches this…
     pub matches: BTreeSet<Match>,
@@ -36,7 +46,7 @@ impl Rules {
                         let specificity = pattern.len();
                         if best_match
                             .as_ref()
-                            .map_or(true, |(_, prev_spec)| specificity > *prev_spec)
+                            .is_none_or(|(_, prev_spec)| specificity > *prev_spec)
                         {
                             best_match = Some((rule, specificity));
                         }
@@ -45,7 +55,7 @@ impl Rules {
                         let specificity = pattern.len();
                         if best_match
                             .as_ref()
-                            .map_or(true, |(_, prev_spec)| specificity > *prev_spec)
+                            .is_none_or(|(_, prev_spec)| specificity > *prev_spec)
                         {
                             best_match = Some((rule, specificity));
                         }
@@ -90,14 +100,14 @@ pub fn default_rules() -> Rules {
             "tlv_bootstrap", // Thread Local Variable
         ]
         .iter()
-        .map(|s| Match::Exact(s.to_string()))
+        .map(|s| Match::from_str(s))
         .collect(),
         caps: BTreeSet::new(), // No capabilities
     });
 
     // Functions starting with "anon." are safe
     rules.push(Rule {
-        matches: [Match::StartsWith("anon.".to_string())]
+        matches: [Match::from_str("anon.::*")]
             .into_iter()
             .collect(),
         caps: BTreeSet::new(),
@@ -119,7 +129,7 @@ pub fn default_rules() -> Rules {
             "rust_realloc",
         ]
         .iter()
-        .map(|s| Match::Exact(s.to_string()))
+        .map(|s| Match::from_str(s))
         .collect(),
         caps: [Capability::Alloc].into_iter().collect(),
     });
@@ -135,14 +145,14 @@ pub fn default_rules() -> Rules {
             "rust_foreign_exception",
         ]
         .iter()
-        .map(|s| Match::Exact(s.to_string()))
+        .map(|s| Match::from_str(s))
         .collect(),
         caps: [Capability::Panic].into_iter().collect(),
     });
 
     // Core panicking
     rules.push(Rule {
-        matches: [Match::StartsWith("core::panicking".to_string())]
+        matches: [Match::from_str("core::panicking::*")]
             .into_iter()
             .collect(),
         caps: [Capability::Panic].into_iter().collect(),
@@ -150,7 +160,7 @@ pub fn default_rules() -> Rules {
 
     // Allocation crate
     rules.push(Rule {
-        matches: [Match::StartsWith("alloc".to_string())]
+        matches: [Match::from_str("alloc::*")]
             .into_iter()
             .collect(),
         caps: [Capability::Alloc].into_iter().collect(),
@@ -159,19 +169,19 @@ pub fn default_rules() -> Rules {
     // Std library - safe/allowlisted paths (only panic + alloc)
     rules.push(Rule {
         matches: [
-            "std::path::Path::extension",
-            "std::process::abort",
-            "std::process::exit",
-            "std::sys::os_str",
-            "std::sys::pal::unix::abort_internal",
-            "std::sys::pal::unix::sync",
-            "std::sys::random",
-            "std::sys::sync",
-            "std::sys::thread_local",
-            "std::thread::local",
+            "std::path::Path::extension::*",
+            "std::process::abort::*",
+            "std::process::exit::*",
+            "std::sys::os_str::*",
+            "std::sys::pal::unix::abort_internal::*",
+            "std::sys::pal::unix::sync::*",
+            "std::sys::random::*",
+            "std::sys::sync::*",
+            "std::sys::thread_local::*",
+            "std::thread::local::*",
         ]
         .iter()
-        .map(|s| Match::StartsWith(s.to_string()))
+        .map(|s| Match::from_str(s))
         .collect(),
         caps: [Capability::Panic, Capability::Alloc].into_iter().collect(),
     });
@@ -179,8 +189,8 @@ pub fn default_rules() -> Rules {
     // Std library - system info
     rules.push(Rule {
         matches: [
-            Match::StartsWith("std::sys::backtrace".to_string()),
-            Match::StartsWith("std::env".to_string()),
+            Match::from_str("std::sys::backtrace::*"),
+            Match::from_str("std::env::*"),
         ]
         .into_iter()
         .collect(),
@@ -192,8 +202,8 @@ pub fn default_rules() -> Rules {
     // Std library - threading
     rules.push(Rule {
         matches: [
-            Match::StartsWith("std::sys::pal::unix::thread::Thread".to_string()),
-            Match::StartsWith("std::thread".to_string()),
+            Match::from_str("std::sys::pal::unix::thread::Thread::*"),
+            Match::from_str("std::thread::*"),
         ]
         .into_iter()
         .collect(),
@@ -205,8 +215,8 @@ pub fn default_rules() -> Rules {
     // Std library - stdio
     rules.push(Rule {
         matches: [
-            Match::StartsWith("std::sys::pal::unix::stdio".to_string()),
-            Match::StartsWith("std::io".to_string()),
+            Match::from_str("std::sys::pal::unix::stdio::*"),
+            Match::from_str("std::io::*"),
         ]
         .into_iter()
         .collect(),
@@ -218,9 +228,9 @@ pub fn default_rules() -> Rules {
     // Std library - file operations
     rules.push(Rule {
         matches: [
-            Match::StartsWith("std::sys::pal::unix::fs".to_string()),
-            Match::StartsWith("std::fs".to_string()),
-            Match::StartsWith("std::path".to_string()),
+            Match::from_str("std::sys::pal::unix::fs::*"),
+            Match::from_str("std::fs::*"),
+            Match::from_str("std::path::*"),
         ]
         .into_iter()
         .collect(),
@@ -231,7 +241,7 @@ pub fn default_rules() -> Rules {
 
     // Std library - networking
     rules.push(Rule {
-        matches: [Match::StartsWith("std::net".to_string())]
+        matches: [Match::from_str("std::net::*")]
             .into_iter()
             .collect(),
         caps: [Capability::Panic, Capability::Alloc, Capability::Net]
@@ -241,7 +251,7 @@ pub fn default_rules() -> Rules {
 
     // Std library - time
     rules.push(Rule {
-        matches: [Match::StartsWith("std::time".to_string())]
+        matches: [Match::from_str("std::time::*")]
             .into_iter()
             .collect(),
         caps: [Capability::Panic, Capability::Alloc, Capability::Time]
@@ -252,11 +262,11 @@ pub fn default_rules() -> Rules {
     // Std library - safe modules (only panic + alloc)
     rules.push(Rule {
         matches: [
-            Match::StartsWith("std::panic".to_string()),
-            Match::StartsWith("std::hash".to_string()),
-            Match::StartsWith("std::collections".to_string()),
-            Match::StartsWith("std::panicking".to_string()),
-            Match::StartsWith("std::sync".to_string()),
+            Match::from_str("std::panic::*"),
+            Match::from_str("std::hash::*"),
+            Match::from_str("std::collections::*"),
+            Match::from_str("std::panicking::*"),
+            Match::from_str("std::sync::*"),
         ]
         .into_iter()
         .collect(),
@@ -265,7 +275,7 @@ pub fn default_rules() -> Rules {
 
     // Std library - everything else gets "Any" (most permissive)
     rules.push(Rule {
-        matches: [Match::StartsWith("std".to_string())].into_iter().collect(),
+        matches: [Match::from_str("std::*")].into_iter().collect(),
         caps: [Capability::Any].into_iter().collect(),
     });
 
