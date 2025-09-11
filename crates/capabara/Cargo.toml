@@ -8,6 +8,10 @@ rust-version.workspace = true
 name = "symbols"
 path = "bin/symbols.rs"
 
+[[bin]]
+name = "capability"
+path = "bin/capability.rs"
+
 [dependencies]
 anyhow = "1.0"
 ar = "0.9"

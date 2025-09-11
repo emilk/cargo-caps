@@ -1,5 +1,7 @@
 use std::fmt;
 
+use anyhow::bail;
+
 use crate::{demangle::demangle_symbol, print::PrintOptions, rust_path::RustPath};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -115,16 +117,21 @@ pub enum TypeName {
     /// `std::collection::Vec<T>`
     RustPath(RustPath),
 
+    Slice(Box<TypeName>),
+
+    /// (A, B, C)
+    Tuple(Vec<TypeName>),
+
     /// `<type_name as trait_name>`
     TypeAsTrait {
         type_name: Box<TypeName>,
-        trait_name: RustPath,
+        trait_name: Box<TypeName>,
     },
 
     /// `<type_name as trait_name>::associated_type`
     AssosiatedPath {
         type_name: Box<TypeName>,
-        trait_name: RustPath,
+        trait_name: Box<TypeName>,
         associated_type: RustPath,
     },
 }
@@ -132,14 +139,25 @@ pub enum TypeName {
 impl fmt::Display for TypeName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeName::RustPath(path) => write!(f, "{path}"),
-            TypeName::TypeAsTrait {
+            Self::RustPath(path) => write!(f, "{path}"),
+            Self::Slice(element) => write!(f, "[{element}]"),
+            Self::Tuple(elements) => {
+                write!(f, "(")?;
+                for (i, elem) in elements.iter().enumerate() {
+                    if 0 < i {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{elem}")?;
+                }
+                write!(f, ")")
+            }
+            Self::TypeAsTrait {
                 type_name,
                 trait_name,
             } => {
                 write!(f, "<{type_name} as {trait_name}>")
             }
-            TypeName::AssosiatedPath {
+            Self::AssosiatedPath {
                 type_name,
                 trait_name,
                 associated_type,
@@ -156,36 +174,16 @@ impl TypeName {
             return Self::parse(&symbol[1..]);
         }
 
-        if let Some(after_caret) = symbol.strip_prefix('<') {
+        // dbg!(symbol);
+
+        if symbol.starts_with('<') {
+            let mut as_pos: Option<usize> = None;
+
             let mut caret_depth = 0;
-            for (i, c) in after_caret.bytes().enumerate() {
-                if caret_depth == 0
-                    && let Some(trait_name_caret_assoc_type) = after_caret[i..].strip_prefix(" as ")
-                {
-                    let type_name = &after_caret[..i];
-                    if let Some(pos) = trait_name_caret_assoc_type.find(">::") {
-                        // <Type as Trait>::Name
-                        let trait_name = &trait_name_caret_assoc_type[..pos];
-                        let associated_type = &trait_name_caret_assoc_type[pos + 3..];
-                        // dbg!(&type_name, &trait_name, &associated_type);
-                        return Ok(Self::AssosiatedPath {
-                            type_name: Box::new(TypeName::parse(type_name)?),
-                            trait_name: RustPath::new(trait_name),
-                            associated_type: RustPath::new(associated_type),
-                        });
-                    } else {
-                        // <Type as Trait>
-                        let trait_name = trait_name_caret_assoc_type;
-                        if let Some(trait_name) = trait_name.strip_suffix('>') {
-                            // dbg!(&type_name, &trait_name);
-                            return Ok(Self::TypeAsTrait {
-                                type_name: Box::new(TypeName::parse(type_name)?),
-                                trait_name: RustPath::new(trait_name),
-                            });
-                        } else {
-                            anyhow::bail!("Bad type name: {symbol:?}")
-                        }
-                    }
+            for (i, c) in symbol.bytes().enumerate() {
+                if caret_depth == 1 && symbol[i..].starts_with(" as ") {
+                    debug_assert!(as_pos.is_none());
+                    as_pos = Some(i);
                 }
 
                 match c {
@@ -193,34 +191,94 @@ impl TypeName {
                     b'>' => caret_depth -= 1,
                     _ => {}
                 }
+
+                if caret_depth == 0 {
+                    if let Some(as_pos) = as_pos {
+                        let type_name = &symbol[1..as_pos];
+                        let trait_name = &symbol[as_pos + 4..i];
+
+                        if symbol[i..].starts_with(">::") {
+                            // <Type as Trait>::Name
+                            let associated_type = &symbol[i + 3..];
+                            // dbg!(&type_name, &trait_name, &associated_type);
+                            return Ok(Self::AssosiatedPath {
+                                type_name: Box::new(TypeName::parse(type_name)?),
+                                trait_name: Box::new(TypeName::parse(trait_name)?),
+                                associated_type: RustPath::new(associated_type),
+                            });
+                        } else {
+                            // dbg!(&type_name, &trait_name);
+                            return Ok(Self::TypeAsTrait {
+                                type_name: Box::new(TypeName::parse(type_name)?),
+                                trait_name: Box::new(TypeName::parse(trait_name)?),
+                            });
+                        }
+                    } else {
+                        // Example: "<dyn core::any::Any>"
+                        assert_eq!(i + 1, symbol.len());
+                        return Ok(Self::RustPath(RustPath::new(strip_indirections(
+                            &symbol[1..i],
+                        ))));
+                    }
+                }
             }
 
             anyhow::bail!("Bad type name: {symbol:?}")
+        } else if symbol.starts_with('(') {
+            // Parse (a,b,c), taking care to only break on commas that are NOT within nested paranthesis:
+            let mut elements = vec![];
+            let mut parens_depth = 0;
+
+            let mut last_start = 1;
+
+            for (i, c) in symbol.bytes().enumerate() {
+                match c {
+                    b'(' => parens_depth += 1,
+                    b')' => parens_depth -= 1,
+                    b',' if parens_depth == 1 => {
+                        elements.push(Self::parse(&symbol[last_start..i])?);
+                        last_start = i + 1;
+                    }
+                    _ => {}
+                }
+
+                if parens_depth == 0 {
+                    elements.push(Self::parse(&symbol[last_start..i])?);
+                    debug_assert!(i + 1 == symbol.len()); // TODO
+                }
+            }
+
+            Ok(Self::Tuple(elements))
+        } else if symbol.starts_with('[') {
+            if symbol.ends_with(']') {
+                Ok(Self::Slice(Box::new(Self::parse(
+                    &symbol[1..symbol.len() - 1],
+                )?)))
+            } else {
+                bail!("Bad type name: {symbol:?}")
+            }
         } else {
             Ok(Self::RustPath(RustPath::new(symbol)))
         }
     }
 
     fn collect_path(&self, paths: &mut Vec<RustPath>) {
-        fn strip_indirections(path: &str) -> &str {
-            let prefixes = ["&", "mut", "const", "dyn", " "];
-
-            for prefix in prefixes {
-                if let Some(rest) = path.strip_prefix(prefix) {
-                    return strip_indirections(rest);
-                }
-            }
-            path
-        }
-
         match self {
             TypeName::RustPath(path) => paths.push(RustPath::new(strip_indirections(path))),
+            TypeName::Slice(element) => {
+                element.collect_path(paths);
+            }
+            TypeName::Tuple(elements) => {
+                for elem in elements {
+                    elem.collect_path(paths);
+                }
+            }
             TypeName::TypeAsTrait {
                 type_name,
                 trait_name,
             } => {
                 type_name.collect_path(paths);
-                paths.push(RustPath::new(strip_indirections(trait_name)));
+                trait_name.collect_path(paths);
             }
             TypeName::AssosiatedPath {
                 type_name,
@@ -228,10 +286,21 @@ impl TypeName {
                 associated_type: _, // Doesn't belong to a crate, so we do not care
             } => {
                 type_name.collect_path(paths);
-                paths.push(RustPath::new(strip_indirections(trait_name)));
+                trait_name.collect_path(paths);
             }
         }
     }
+}
+
+fn strip_indirections(path: &str) -> &str {
+    let prefixes = ["&", "*", "mut", "const", "dyn", " "];
+
+    for prefix in prefixes {
+        if let Some(rest) = path.strip_prefix(prefix) {
+            return strip_indirections(rest);
+        }
+    }
+    path
 }
 
 // -----------------------------------
@@ -257,6 +326,7 @@ impl fmt::Display for TraitFnImpl {
 impl TraitFnImpl {
     pub fn parse(symbol: &str) -> anyhow::Result<Self> {
         let symbol = symbol.replace("..", "::");
+        // dbg!(&symbol);
 
         // Find last ">::`:
         if let Some(last_colon_pos) = symbol.rfind(">::") {
@@ -310,6 +380,14 @@ fn test_parse_trait_impl() {
             vec!["std::io::cursor::Cursor<T>", "std::io::Read"],
         ),
         (
+            "_<dyn core..any..Any>::is::h10782f44127ca60f",
+            vec!["core::any::Any"],
+        ),
+        (
+            "<T as <std::OsString as core::From<&T>>::SpecToOsString>::spec_to_os_string",
+            vec!["T", "std::OsString", "core::From<&T>"],
+        ),
+        (
             "<std..io..cursor..Cursor<T> as std..io..Read>::read_exact",
             vec!["std::io::cursor::Cursor<T>", "std::io::Read"],
         ),
@@ -327,6 +405,17 @@ fn test_parse_trait_impl() {
                 "alloc::collections::btree::map::IntoIter<K,V,A>",
                 "core::ops::drop::Drop",
                 "core::ops::drop::Drop",
+            ],
+        ),
+        (
+            "<(A,B) as core::ops::range::RangeBounds<T>>::start_bound",
+            vec!["A", "B", "core::ops::range::RangeBounds<T>"],
+        ),
+        (
+            "<[core::mem::maybe_uninit::MaybeUninit<T>] as core::array::iter::iter_inner::PartialDrop>::partial_drop",
+            vec![
+                "core::mem::maybe_uninit::MaybeUninit<T>",
+                "core::array::iter::iter_inner::PartialDrop",
             ],
         ),
     ];

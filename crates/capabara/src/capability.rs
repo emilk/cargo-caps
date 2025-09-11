@@ -67,8 +67,13 @@ impl DeducedCapablities {
             // Get part after `]::`:
             if let Some(end_bracket) = symbol.demangled.find("]::") {
                 symbol.demangled = symbol.demangled[end_bracket + 3..].to_owned();
-                let capbility = rustc_capability(&symbol.demangled);
-                self.add_capability(symbol, capbility);
+                if let Some(capbilities) = c_capabilities(&symbol.demangled) {
+                    for capbility in capbilities {
+                        self.add_capability(symbol.clone(), Some(capbility));
+                    }
+                } else {
+                    self.unknown_symbols.insert(symbol);
+                }
             } else {
                 panic!("Weird symbol: {symbol:?}"); // TODO
             };
@@ -76,14 +81,24 @@ impl DeducedCapablities {
             symbol.demangled = trait_impl.to_string();
             let paths = trait_impl.paths();
             for path in paths {
-                self.add_path(symbol.clone(), path);
+                if path.segments().len() <= 1 {
+                    // Probably a built-in type like `*const T`
+                } else {
+                    self.add_path(symbol.clone(), path);
+                }
             }
         } else if symbol.demangled.contains("::") {
             let path = RustPath::new(&symbol.demangled);
             self.add_path(symbol, path);
         } else {
-            let capbility = system_capability(&symbol.demangled);
-            self.add_capability(symbol, capbility);
+            //
+            if let Some(capbilities) = c_capabilities(&symbol.demangled) {
+                for capbility in capbilities {
+                    self.add_capability(symbol.clone(), Some(capbility));
+                }
+            } else {
+                self.unknown_symbols.insert(symbol);
+            }
         };
     }
 
@@ -107,9 +122,61 @@ impl DeducedCapablities {
                 }
             }
             "std" => {
-                vec![Capability::Any] // TODO: more conservative
+                // NOTE: anything in std can panic and allocate
+                let mut caps = vec![Capability::Panic, Capability::Alloc];
+
+                let allow_listed = [
+                    "std::path::Path::extension",
+                    "std::process::abort", // TODO: condier making this a capability
+                    "std::process::exit",  // TODO: condier making this a capability
+                    "std::sys::os_str",
+                    "std::sys::pal::unix::abort_internal", // TODO: condier making this a capability
+                    "std::sys::pal::unix::sync",
+                    "std::sys::random", // TODO: consider making this a capability
+                    "std::sys::sync",
+                    "std::sys::thread_local",
+                    "std::thread::local",
+                ];
+
+                let env_prefixes = ["std::sys::backtrace"];
+
+                if allow_listed.iter().any(|prefix| path.starts_with(prefix)) {
+                    // ok
+                } else if env_prefixes.iter().any(|prefix| path.starts_with(prefix)) {
+                    caps.push(Capability::Sysinfo);
+                } else if path.starts_with("std::sys::pal::unix::thread::Thread") {
+                    caps.push(Capability::Thread);
+                } else if path.starts_with("std::sys::pal::unix::stdio") {
+                    caps.push(Capability::Stdio);
+                } else if path.starts_with("std::sys::pal::unix::fs") {
+                    caps.push(Capability::Fopen);
+                } else {
+                    match segments[1] {
+                        "panic" | "hash" | "collections" | "panicking" | "sync" => {}
+
+                        "env" => caps.push(Capability::Sysinfo),
+                        "fs" => caps.push(Capability::Fopen),
+                        "io" => caps.push(Capability::Stdio),
+                        "net" => caps.push(Capability::Net),
+                        "path" => caps.push(Capability::Fopen),
+                        "thread" => caps.push(Capability::Thread),
+                        "time" => caps.push(Capability::Time), // TODO Not everything in time actually reads the time
+                        _ => {
+                            caps.push(Capability::Any);
+                        } // TODO: more conservative
+                    }
+                }
+
+                caps
             }
             crate_name => {
+                debug_assert!(
+                    !crate_name.is_empty()
+                        && crate_name
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_'),
+                    "Weird crate name: {crate_name:?} in symbol {symbol:?}"
+                );
                 self.unknown_crates
                     .entry(crate_name.to_string())
                     .or_default()
@@ -127,13 +194,73 @@ impl DeducedCapablities {
     }
 }
 
-fn rustc_capability(demangled: &str) -> Option<Capability> {
-    match demangled {
-        "__rust_alloc" => Some(Capability::Alloc),
-        _ => None, // Unknown
-    }
-}
+fn c_capabilities(demangled: &str) -> Option<Vec<Capability>> {
+    let demangled = demangled.trim_start_matches('_');
 
-fn system_capability(_demangled: &str) -> Option<Capability> {
-    None
+    if demangled.starts_with("anon.") {
+        return Some(vec![]); // Pretty sure these are ok
+    }
+
+    let allow = [
+        // Simple mem stuff:
+        "memcmp",
+        "memcpy",
+        "memmove",
+        "memset",
+        // Math:
+        "atan2f",
+        "bzero",
+        "cos",
+        "exp10",
+        "expf",
+        "fmod",
+        "fmodf",
+        "hypotf",
+        "log10",
+        "powidf2",
+        "sin",
+        "sincos_stret",
+        "sincosf_stret",
+        // Modulus:
+        "umodti3",
+        // Misc
+        "tlv_bootstrap", // Thread Local Variable
+    ];
+
+    let alloc = [
+        "rdl_alloc",
+        "rdl_alloc_zeroed",
+        "rdl_dealloc",
+        "rdl_realloc",
+        "rg_oom",
+        "rust_alloc_error_handler",
+        "rust_alloc_zeroed",
+        "rust_alloc",
+        "rust_dealloc",
+        "rust_no_alloc_shim_is_unstable",
+        "rust_realloc",
+    ];
+
+    let panic = [
+        "rust_panic",
+        "rust_begin_unwind",
+        "rust_drop_panic",
+        "rust_start_panic",
+        "rust_panic_cleanup",
+        "rust_foreign_exception",
+    ];
+
+    if allow.contains(&demangled) {
+        return Some(vec![]); // math
+    }
+
+    if alloc.contains(&demangled) {
+        return Some(vec![Capability::Alloc]);
+    }
+
+    if panic.contains(&demangled) {
+        return Some(vec![Capability::Panic]);
+    }
+
+    None // Unknown
 }
