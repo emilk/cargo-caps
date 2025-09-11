@@ -1,0 +1,185 @@
+(
+    rules: [
+        (
+            caps: [],
+            matches: [
+                "atan2f",
+                "bzero",
+                "cos",
+                "exp10",
+                "expf",
+                "fmod",
+                "fmodf",
+                "hypotf",
+                "log10",
+                "memcmp",
+                "memcpy",
+                "memmove",
+                "memset",
+                "powidf2",
+                "sin",
+                "sincos_stret",
+                "sincosf_stret",
+                "tlv_bootstrap",
+                "umodti3",
+            ],
+        ),
+        (
+            caps: [],
+            matches: [
+                "anon.::*",
+            ],
+        ),
+        (
+            caps: [
+                Alloc,
+            ],
+            matches: [
+                "rdl_alloc",
+                "rdl_alloc_zeroed",
+                "rdl_dealloc",
+                "rdl_realloc",
+                "rg_oom",
+                "rust_alloc",
+                "rust_alloc_error_handler",
+                "rust_alloc_zeroed",
+                "rust_dealloc",
+                "rust_no_alloc_shim_is_unstable",
+                "rust_realloc",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+            ],
+            matches: [
+                "rust_begin_unwind",
+                "rust_drop_panic",
+                "rust_foreign_exception",
+                "rust_panic",
+                "rust_panic_cleanup",
+                "rust_start_panic",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+            ],
+            matches: [
+                "core::panicking::*",
+            ],
+        ),
+        (
+            caps: [
+                Alloc,
+            ],
+            matches: [
+                "alloc::*",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+                Alloc,
+            ],
+            matches: [
+                "std::path::Path::extension::*",
+                "std::process::abort::*",
+                "std::process::exit::*",
+                "std::sys::os_str::*",
+                "std::sys::pal::unix::abort_internal::*",
+                "std::sys::pal::unix::sync::*",
+                "std::sys::random::*",
+                "std::sys::sync::*",
+                "std::sys::thread_local::*",
+                "std::thread::local::*",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+                Alloc,
+                Sysinfo,
+            ],
+            matches: [
+                "std::env::*",
+                "std::sys::backtrace::*",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+                Alloc,
+                Thread,
+            ],
+            matches: [
+                "std::sys::pal::unix::thread::Thread::*",
+                "std::thread::*",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+                Alloc,
+                Stdio,
+            ],
+            matches: [
+                "std::io::*",
+                "std::sys::pal::unix::stdio::*",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+                Alloc,
+                Fopen,
+            ],
+            matches: [
+                "std::fs::*",
+                "std::path::*",
+                "std::sys::pal::unix::fs::*",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+                Alloc,
+                Net,
+            ],
+            matches: [
+                "std::net::*",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+                Alloc,
+                Time,
+            ],
+            matches: [
+                "std::time::*",
+            ],
+        ),
+        (
+            caps: [
+                Panic,
+                Alloc,
+            ],
+            matches: [
+                "std::collections::*",
+                "std::hash::*",
+                "std::panic::*",
+                "std::panicking::*",
+                "std::sync::*",
+            ],
+        ),
+        (
+            caps: [
+                Any,
+            ],
+            matches: [
+                "std::*",
+            ],
+        ),
+    ],
+)

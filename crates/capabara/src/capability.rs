@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     Symbol,
     cap_rule::{Rules, default_rules},
@@ -8,7 +10,7 @@ use crate::{
 
 /// A capability a crate can be granted,
 /// or is suspected of having.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Capability {
     /// Call [`panic!`]
     Panic,

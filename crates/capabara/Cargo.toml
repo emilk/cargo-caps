@@ -4,6 +4,9 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "symbols"
 path = "bin/symbols.rs"
@@ -12,6 +15,7 @@ path = "bin/symbols.rs"
 name = "capability"
 path = "bin/capability.rs"
 
+
 [dependencies]
 anyhow = "1.0"
 ar = "0.9"
@@ -19,4 +23,6 @@ clap = { version = "4.0", features = ["derive"] }
 cpp_demangle = "0.4"
 log-once = "0.4.1"
 object = "0.37.3"
+ron = "0.8"
 rustc-demangle = "0.1"
+serde = { version = "1.0", features = ["derive"] }
