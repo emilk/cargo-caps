@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::capability::Capability;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum Match {
+pub enum Pattern {
     /// Any rust path or link symbol that exactly matches this
     Exact(String),
 
@@ -13,12 +13,12 @@ pub enum Match {
     StartsWith(String),
 }
 
-impl Match {
+impl Pattern {
     pub fn from_str(s: &str) -> Self {
         if s.ends_with("::*") {
-            Match::StartsWith(s[..s.len() - 3].to_string())
+            Pattern::StartsWith(s[..s.len() - 3].to_string())
         } else {
-            Match::Exact(s.to_string())
+            Pattern::Exact(s.to_string())
         }
     }
 }
@@ -26,7 +26,7 @@ impl Match {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rule {
     /// If the symbol matches this…
-    pub matches: BTreeSet<Match>,
+    pub pattern: BTreeSet<Pattern>,
 
     /// …then it is known to have these, and only these, capabitites
     pub caps: BTreeSet<Capability>,
@@ -39,25 +39,34 @@ pub struct Rules {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct StringRule {
-    /// String patterns that will be converted to Match using Match::from_str
-    matches: BTreeSet<String>,
+struct SerializedRule {
     /// Capabilities for this rule
     caps: BTreeSet<Capability>,
+
+    /// String patterns that will be converted to Match using Match::from_str
+    patterns: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct StringRules {
-    rules: Vec<StringRule>,
+struct SerializedRules {
+    rules: Vec<SerializedRule>,
 }
 
-impl From<StringRules> for Rules {
-    fn from(string_rules: StringRules) -> Self {
-        Rules {
-            rules: string_rules.rules.into_iter().map(|rule| Rule {
-                matches: rule.matches.into_iter().map(|s| Match::from_str(&s)).collect(),
-                caps: rule.caps,
-            }).collect(),
+impl From<SerializedRules> for Rules {
+    fn from(rules: SerializedRules) -> Self {
+        Self {
+            rules: rules
+                .rules
+                .into_iter()
+                .map(|rule| Rule {
+                    caps: rule.caps,
+                    pattern: rule
+                        .patterns
+                        .into_iter()
+                        .map(|s| Pattern::from_str(&s))
+                        .collect(),
+                })
+                .collect(),
         }
     }
 }
@@ -68,9 +77,9 @@ impl Rules {
         let mut best_match: Option<(&Rule, usize)> = None;
 
         for rule in &self.rules {
-            for m in &rule.matches {
+            for m in &rule.pattern {
                 match m {
-                    Match::Exact(pattern) if pattern == symbol => {
+                    Pattern::Exact(pattern) if pattern == symbol => {
                         let specificity = pattern.len();
                         if best_match
                             .as_ref()
@@ -79,7 +88,7 @@ impl Rules {
                             best_match = Some((rule, specificity));
                         }
                     }
-                    Match::StartsWith(pattern) if symbol.starts_with(pattern) => {
+                    Pattern::StartsWith(pattern) if symbol.starts_with(pattern) => {
                         let specificity = pattern.len();
                         if best_match
                             .as_ref()
@@ -99,7 +108,15 @@ impl Rules {
 
 pub fn default_rules() -> Rules {
     static DEFAULT_RULES_RON: &str = include_str!("default_rules.ron");
-    
-    let string_rules: StringRules = ron::from_str(DEFAULT_RULES_RON).expect("Failed to parse default rules RON file");
+
+    let string_rules: SerializedRules =
+        ron::from_str(DEFAULT_RULES_RON).expect("Failed to parse default rules RON file");
     string_rules.into()
+}
+
+#[test]
+fn test_default_rules() {
+    let rules = default_rules();
+    assert_eq!(rules.match_symbol("unknown"), None);
+    // TODO: more santiy checking
 }

@@ -2,7 +2,7 @@
     rules: [
         (
             caps: [],
-            matches: [
+            patterns: [
                 "atan2f",
                 "bzero",
                 "cos",
@@ -26,7 +26,7 @@
         ),
         (
             caps: [],
-            matches: [
+            patterns: [
                 "anon.::*",
             ],
         ),
@@ -34,7 +34,7 @@
             caps: [
                 Alloc,
             ],
-            matches: [
+            patterns: [
                 "rdl_alloc",
                 "rdl_alloc_zeroed",
                 "rdl_dealloc",
@@ -52,7 +52,7 @@
             caps: [
                 Panic,
             ],
-            matches: [
+            patterns: [
                 "rust_begin_unwind",
                 "rust_drop_panic",
                 "rust_foreign_exception",
@@ -65,7 +65,7 @@
             caps: [
                 Panic,
             ],
-            matches: [
+            patterns: [
                 "core::panicking::*",
             ],
         ),
@@ -73,7 +73,7 @@
             caps: [
                 Alloc,
             ],
-            matches: [
+            patterns: [
                 "alloc::*",
             ],
         ),
@@ -82,7 +82,7 @@
                 Panic,
                 Alloc,
             ],
-            matches: [
+            patterns: [
                 "std::path::Path::extension::*",
                 "std::process::abort::*",
                 "std::process::exit::*",
@@ -101,7 +101,7 @@
                 Alloc,
                 Sysinfo,
             ],
-            matches: [
+            patterns: [
                 "std::env::*",
                 "std::sys::backtrace::*",
             ],
@@ -112,7 +112,7 @@
                 Alloc,
                 Thread,
             ],
-            matches: [
+            patterns: [
                 "std::sys::pal::unix::thread::Thread::*",
                 "std::thread::*",
             ],
@@ -123,7 +123,7 @@
                 Alloc,
                 Stdio,
             ],
-            matches: [
+            patterns: [
                 "std::io::*",
                 "std::sys::pal::unix::stdio::*",
             ],
@@ -134,7 +134,7 @@
                 Alloc,
                 Fopen,
             ],
-            matches: [
+            patterns: [
                 "std::fs::*",
                 "std::path::*",
                 "std::sys::pal::unix::fs::*",
@@ -146,7 +146,7 @@
                 Alloc,
                 Net,
             ],
-            matches: [
+            patterns: [
                 "std::net::*",
             ],
         ),
@@ -156,7 +156,7 @@
                 Alloc,
                 Time,
             ],
-            matches: [
+            patterns: [
                 "std::time::*",
             ],
         ),
@@ -165,7 +165,7 @@
                 Panic,
                 Alloc,
             ],
-            matches: [
+            patterns: [
                 "std::collections::*",
                 "std::hash::*",
                 "std::panic::*",
@@ -177,7 +177,7 @@
             caps: [
                 Any,
             ],
-            matches: [
+            patterns: [
                 "std::*",
             ],
         ),
