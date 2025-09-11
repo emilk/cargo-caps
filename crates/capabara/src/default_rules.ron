@@ -1,185 +1,168 @@
-(
-    rules: [
-        (
-            caps: [],
-            patterns: [
-                "atan2f",
-                "bzero",
-                "cos",
-                "exp10",
-                "expf",
-                "fmod",
-                "fmodf",
-                "hypotf",
-                "log10",
-                "memcmp",
-                "memcpy",
-                "memmove",
-                "memset",
-                "powidf2",
-                "sin",
-                "sincos_stret",
-                "sincosf_stret",
-                "tlv_bootstrap",
-                "umodti3",
-            ],
-        ),
-        (
-            caps: [],
-            patterns: [
-                "anon.::*",
-            ],
-        ),
-        (
-            caps: [
-                Alloc,
-            ],
-            patterns: [
-                "rdl_alloc",
-                "rdl_alloc_zeroed",
-                "rdl_dealloc",
-                "rdl_realloc",
-                "rg_oom",
-                "rust_alloc",
-                "rust_alloc_error_handler",
-                "rust_alloc_zeroed",
-                "rust_dealloc",
-                "rust_no_alloc_shim_is_unstable",
-                "rust_realloc",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-            ],
-            patterns: [
-                "rust_begin_unwind",
-                "rust_drop_panic",
-                "rust_foreign_exception",
-                "rust_panic",
-                "rust_panic_cleanup",
-                "rust_start_panic",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-            ],
-            patterns: [
-                "core::panicking::*",
-            ],
-        ),
-        (
-            caps: [
-                Alloc,
-            ],
-            patterns: [
-                "alloc::*",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-                Alloc,
-            ],
-            patterns: [
-                "std::path::Path::extension::*",
-                "std::process::abort::*",
-                "std::process::exit::*",
-                "std::sys::os_str::*",
-                "std::sys::pal::unix::abort_internal::*",
-                "std::sys::pal::unix::sync::*",
-                "std::sys::random::*",
-                "std::sys::sync::*",
-                "std::sys::thread_local::*",
-                "std::thread::local::*",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-                Alloc,
-                Sysinfo,
-            ],
-            patterns: [
-                "std::env::*",
-                "std::sys::backtrace::*",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-                Alloc,
-                Thread,
-            ],
-            patterns: [
-                "std::sys::pal::unix::thread::Thread::*",
-                "std::thread::*",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-                Alloc,
-                Stdio,
-            ],
-            patterns: [
-                "std::io::*",
-                "std::sys::pal::unix::stdio::*",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-                Alloc,
-                Fopen,
-            ],
-            patterns: [
-                "std::fs::*",
-                "std::path::*",
-                "std::sys::pal::unix::fs::*",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-                Alloc,
-                Net,
-            ],
-            patterns: [
-                "std::net::*",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-                Alloc,
-                Time,
-            ],
-            patterns: [
-                "std::time::*",
-            ],
-        ),
-        (
-            caps: [
-                Panic,
-                Alloc,
-            ],
-            patterns: [
-                "std::collections::*",
-                "std::hash::*",
-                "std::panic::*",
-                "std::panicking::*",
-                "std::sync::*",
-            ],
-        ),
-        (
-            caps: [
-                Any,
-            ],
-            patterns: [
-                "std::*",
-            ],
-        ),
-    ],
-)
+[
+    (
+        // Stuff that anyone is allowed to use:
+        caps: [],
+        patterns: [
+            // Anonymous functions… I think these are things LLVM generates, and shuld be fine
+            "anon.::*",
+
+            // Simple memory stuff:
+            "bzero",
+            "memcmp",
+            "memcpy",
+            "memmove",
+            "memset",
+
+            // Math:
+            "atan2f",
+            "cos",
+            "exp10",
+            "expf",
+            "fmod",
+            "fmodf",
+            "hypotf",
+            "log10",
+            "powidf2",
+            "sin",
+            "sincos_stret",
+            "sincosf_stret",
+
+            // Thread Local Variable
+            "tlv_bootstrap",
+
+            // Modulus (TODO: support more of these)
+            "umodti3",
+        ],
+    ),
+    (
+        caps: [
+            Alloc,
+        ],
+        patterns: [
+            "rdl_alloc_zeroed",
+            "rdl_alloc",
+            "rdl_dealloc",
+            "rdl_realloc",
+            "rg_oom",
+            "rust_alloc_error_handler",
+            "rust_alloc_zeroed",
+            "rust_alloc",
+            "rust_dealloc",
+            "rust_no_alloc_shim_is_unstable",
+            "rust_realloc",
+        ],
+    ),
+    (
+        caps: [
+            Panic,
+        ],
+        patterns: [
+            "rust_begin_unwind",
+            "rust_drop_panic",
+            "rust_foreign_exception",
+            "rust_panic_cleanup",
+            "rust_panic",
+            "rust_start_panic",
+            "core::panicking::*",
+        ],
+    ),
+    (
+        caps: [
+            Alloc,
+        ],
+        patterns: [
+            "alloc::*",
+        ],
+    ),
+    // NOTE: Everythng in std is generally allowed to allocate and panic
+    (
+        caps: [
+            Alloc, Panic,
+        ],
+        patterns: [
+            "std::collections::*",
+            "std::hash::*",
+            "std::panic::*",
+            "std::panicking::*",
+            "std::path::Path::extension::*",
+            "std::process::abort::*", // TODO: consider adding special capability for abort/exit
+            "std::process::exit::*", // TODO: consider adding special capability for abort/exit
+            "std::sync::*",
+            "std::sys::os_str::*",
+            "std::sys::pal::unix::abort_internal::*",
+            "std::sys::pal::unix::sync::*",
+            "std::sys::random::*", // TODO: consider adding special capability for random
+            "std::sys::sync::*",
+            "std::sys::thread_local::*",
+            "std::thread::local::*",
+        ],
+    ),
+    (
+        caps: [
+            Alloc, Panic,
+            Sysinfo,
+        ],
+        patterns: [
+            "std::env::*",
+            "std::sys::backtrace::*",
+        ],
+    ),
+    (
+        caps: [
+            Alloc, Panic,
+            Thread,
+        ],
+        patterns: [
+            "std::sys::pal::unix::thread::Thread::*",
+            "std::thread::*",
+        ],
+    ),
+    (
+        caps: [
+            Alloc, Panic,
+            Stdio,
+        ],
+        patterns: [
+            "std::io::*",
+            "std::sys::pal::unix::stdio::*",
+        ],
+    ),
+    (
+        caps: [
+            Alloc, Panic,
+            Fopen,
+        ],
+        patterns: [
+            "std::fs::*",
+            "std::path::*",
+            "std::sys::pal::unix::fs::*",
+        ],
+    ),
+    (
+        caps: [
+            Alloc, Panic,
+            Net,
+        ],
+        patterns: [
+            "std::net::*",
+        ],
+    ),
+    (
+        caps: [
+            Alloc, Panic,
+            Time,
+        ],
+        patterns: [
+            "std::time::*",
+        ],
+    ),
+    (
+        // TODO: categorize the rest of std:: :)
+        caps: [
+            Any, // conservatively assume the worst
+        ],
+        patterns: [
+            "std::*",
+        ],
+    ),
+]

@@ -47,25 +47,14 @@ struct SerializedRule {
     patterns: BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct SerializedRules {
-    rules: Vec<SerializedRule>,
-}
-
-impl From<SerializedRules> for Rules {
-    fn from(rules: SerializedRules) -> Self {
-        Self {
-            rules: rules
-                .rules
+impl From<SerializedRule> for Rule {
+    fn from(rule: SerializedRule) -> Self {
+        Rule {
+            caps: rule.caps,
+            pattern: rule
+                .patterns
                 .into_iter()
-                .map(|rule| Rule {
-                    caps: rule.caps,
-                    pattern: rule
-                        .patterns
-                        .into_iter()
-                        .map(|s| Pattern::from_str(&s))
-                        .collect(),
-                })
+                .map(|s| Pattern::from_str(&s))
                 .collect(),
         }
     }
@@ -109,9 +98,11 @@ impl Rules {
 pub fn default_rules() -> Rules {
     static DEFAULT_RULES_RON: &str = include_str!("default_rules.ron");
 
-    let string_rules: SerializedRules =
+    let string_rules: Vec<SerializedRule> =
         ron::from_str(DEFAULT_RULES_RON).expect("Failed to parse default rules RON file");
-    string_rules.into()
+    Rules {
+        rules: string_rules.into_iter().map(|rule| rule.into()).collect(),
+    }
 }
 
 #[test]
