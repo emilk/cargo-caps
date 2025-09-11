@@ -14,9 +14,9 @@ pub enum Pattern {
 }
 
 impl Pattern {
-    pub fn from_str(s: &str) -> Self {
-        if s.ends_with("::*") {
-            Self::StartsWith(s[..s.len() - 3].to_string())
+    pub fn parse_simple(s: &str) -> Self {
+        if let Some(stripped) = s.strip_suffix("::*") {
+            Self::StartsWith(stripped.to_owned())
         } else {
             Self::Exact(s.to_owned())
         }
@@ -54,7 +54,7 @@ impl From<SerializedRule> for Rule {
             pattern: rule
                 .patterns
                 .into_iter()
-                .map(|s| Pattern::from_str(&s))
+                .map(|s| Pattern::parse_simple(&s))
                 .collect(),
         }
     }

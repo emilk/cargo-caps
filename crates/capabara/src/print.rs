@@ -64,8 +64,8 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions)
 
 pub fn print_symbols(
     binary_path: &Path,
-    symbols: Vec<Symbol>,
-    options: PrintOptions,
+    symbols: &[Symbol],
+    options: &PrintOptions,
 ) -> Result<()> {
     let depth = options.depth;
 
@@ -76,7 +76,7 @@ pub fn print_symbols(
         return Ok(());
     }
 
-    let mut tree = tree_from_symbols(&symbols);
+    let mut tree = tree_from_symbols(symbols);
     if true {
         tree = tree.collapse_single_nodes(0, false);
     }
@@ -99,7 +99,7 @@ pub fn print_symbols(
     println!("{display_path}");
 
     // Print the entire tree using the single print_tree function
-    print_tree(&tree, "", depth, &options);
+    print_tree(&tree, "", depth, options);
 
     Ok(())
 }

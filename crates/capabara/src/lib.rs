@@ -6,7 +6,8 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use object::{
-    Object as _, ObjectSymbol as _, SymbolKind as ObjectSymbolKind, SymbolScope as ObjectSymbolScope,
+    Object as _, ObjectSymbol as _, SymbolKind as ObjectSymbolKind,
+    SymbolScope as ObjectSymbolScope,
 };
 
 use crate::symbol::{Symbol, SymbolKind, SymbolScope};
@@ -104,6 +105,7 @@ fn collect_file_symbols(all_symbols: &mut Vec<Symbol>, file: &object::File<'_>) 
                 ObjectSymbolScope::Dynamic => SymbolScope::Dynamic,
             };
 
+            #[expect(clippy::match_same_arms)]
             let kind = match symbol.kind() {
                 ObjectSymbolKind::Unknown => SymbolKind::Unknown,
                 ObjectSymbolKind::Text => SymbolKind::Text,
@@ -127,24 +129,20 @@ mod tests {
     #[test]
     fn test_filter_symbols() {
         let symbols = vec![
-            Symbol::with_metadata("func1".to_string(), SymbolScope::Linkage, SymbolKind::Text),
+            Symbol::with_metadata("func1".to_owned(), SymbolScope::Linkage, SymbolKind::Text),
             Symbol::with_metadata(
-                "local_func".to_string(),
+                "local_func".to_owned(),
                 SymbolScope::Compilation,
                 SymbolKind::Text,
             ),
             Symbol::with_metadata(
-                "data_var".to_string(),
+                "data_var".to_owned(),
                 SymbolScope::Linkage,
                 SymbolKind::Data,
             ),
+            Symbol::with_metadata("label1".to_owned(), SymbolScope::Dynamic, SymbolKind::Label),
             Symbol::with_metadata(
-                "label1".to_string(),
-                SymbolScope::Dynamic,
-                SymbolKind::Label,
-            ),
-            Symbol::with_metadata(
-                "unknown_sym".to_string(),
+                "unknown_sym".to_owned(),
                 SymbolScope::Linkage,
                 SymbolKind::Unknown,
             ),

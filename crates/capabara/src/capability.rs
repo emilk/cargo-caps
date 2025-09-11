@@ -74,13 +74,13 @@ impl DeducedCapablities {
     pub fn from_symbols(symbols: impl IntoIterator<Item = Symbol>) -> Self {
         let mut slf = Self::default();
         for symbol in symbols {
-            slf.add(symbol);
+            slf.add(&symbol);
         }
         slf
     }
 
     /// Capability from symbol
-    fn add(&mut self, symbol: Symbol) {
+    fn add(&mut self, symbol: &Symbol) {
         for path in symbol.paths() {
             match path {
                 FunctionOrPath::Function(fun_name) => {

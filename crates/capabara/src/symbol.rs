@@ -90,9 +90,7 @@ impl FunctionOrPath {
             // Example: '__rustc[5224e6b81cd82a8f]::__rust_alloc'
             // Get part after `]::`:
             if let Some(end_bracket) = demangled.find("]::") {
-                vec![Self::Function(
-                    demangled[end_bracket + 3..].to_owned(),
-                )]
+                vec![Self::Function(demangled[end_bracket + 3..].to_owned())]
             } else {
                 panic!("Weird symbol: {demangled:?}"); // TODO
             }
@@ -230,7 +228,10 @@ impl TypeName {
             let mut caret_depth = 0;
             for (i, c) in symbol.bytes().enumerate() {
                 if caret_depth == 1 && symbol[i..].starts_with(" as ") {
-                    debug_assert!(as_pos.is_none());
+                    debug_assert!(
+                        as_pos.is_none(),
+                        "Multiple 'as' keywords found in type name"
+                    );
                     as_pos = Some(i);
                 }
 
@@ -263,7 +264,11 @@ impl TypeName {
                         }
                     } else {
                         // Example: "<dyn core::any::Any>"
-                        assert_eq!(i + 1, symbol.len());
+                        assert_eq!(
+                            i + 1,
+                            symbol.len(),
+                            "Unexpected characters after closing bracket"
+                        );
                         return Ok(Self::RustPath(RustPath::new(strip_indirections(
                             &symbol[1..i],
                         ))));
@@ -292,7 +297,10 @@ impl TypeName {
 
                 if parens_depth == 0 {
                     elements.push(Self::parse(&symbol[last_start..i])?);
-                    debug_assert!(i + 1 == symbol.len()); // TODO
+                    debug_assert!(
+                        i + 1 == symbol.len(),
+                        "Unexpected characters after closing parenthesis"
+                    ); // TODO
                 }
             }
 
@@ -324,11 +332,8 @@ impl TypeName {
             Self::TypeAsTrait {
                 type_name,
                 trait_name,
-            } => {
-                type_name.collect_path(paths);
-                trait_name.collect_path(paths);
             }
-            Self::AssosiatedPath {
+            | Self::AssosiatedPath {
                 type_name,
                 trait_name,
                 associated_type: _, // Doesn't belong to a crate, so we do not care
@@ -481,5 +486,5 @@ fn test_paths() {
         vec![FunctionOrPath::RustPath(RustPath::new(
             "parking_lot::raw_rwlock::RawRwLock::lock_shared_slow"
         ))]
-    )
+    );
 }

@@ -53,7 +53,7 @@ impl Tree {
                     && children.len() == 1
                     && children.values().next().is_some_and(Self::is_leaf)
                 {
-                    children.into_iter().next().unwrap().1
+                    children.into_iter().next().expect("Child node should exist since we checked children.len() == 1").1
                 } else {
                     Self::Node(children)
                 }
@@ -89,7 +89,7 @@ fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
         .into_iter()
         .map(|(prefix, symbols)| {
             let tree = if symbols.len() == 1 {
-                Tree::Leaf(symbols.into_iter().next().unwrap())
+                Tree::Leaf(symbols.into_iter().next().expect("symbols vector should have exactly one element"))
             } else {
                 Tree::Node(
                     symbols
@@ -129,10 +129,8 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
             // Get part after `]::`:
             if let Some(end_bracket) = demangled.find("]::") {
                 symbol.demangled = demangled[end_bracket + 3..].to_owned();
-                insert_leaf(category, &symbol);
-            } else {
-                insert_leaf(category, &symbol);
             }
+            insert_leaf(category, &symbol);
         } else if let Ok(trait_impl) = TraitFnImpl::parse(demangled) {
             symbol.demangled = trait_impl.to_string();
 
@@ -149,7 +147,7 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
         } else if demangled.contains("::") {
             let path = RustPath::new(demangled);
             let segments = path.segments();
-            debug_assert!(segments.len() > 1);
+            debug_assert!(segments.len() > 1, "Rust path should have more than one segment");
             let crate_name = segments[0];
             let category = crate_category(&mut root, crate_name);
             insert_symbol_into_tree(category, &segments, symbol.clone());

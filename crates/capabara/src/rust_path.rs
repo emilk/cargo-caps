@@ -153,13 +153,13 @@ mod tests {
     #[test]
     fn test_display() {
         let path = RustPath::new("std::collections::Vec");
-        assert_eq!(format!("{}", path), "std::collections::Vec");
+        assert_eq!(format!("{path}"), "std::collections::Vec");
     }
 
     #[test]
     fn test_debug() {
         let path = RustPath::new("std::collections::Vec");
-        assert_eq!(format!("{:?}", path), "RustPath(\"std::collections::Vec\")");
+        assert_eq!(format!("{path:?}"), "RustPath(\"std::collections::Vec\")");
     }
 
     #[test]

@@ -126,11 +126,11 @@ mod tests {
     fn test_try_manual_demangle() {
         assert_eq!(
             try_manual_demangle("__ZN4egui7context"),
-            Some("egui::context".to_string())
+            Some("egui::context".to_owned())
         );
         assert_eq!(
             try_manual_demangle("__ZN4test5hello17hef349e8e72b897f3E"),
-            Some("test::hello::hef349e8e72b897f3".to_string())
+            Some("test::hello::hef349e8e72b897f3".to_owned())
         );
         assert_eq!(try_manual_demangle("regular_symbol"), None);
         assert_eq!(try_manual_demangle("__Z"), None);

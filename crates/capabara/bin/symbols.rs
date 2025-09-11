@@ -65,6 +65,6 @@ fn main() -> Result<()> {
         include_mangled: args.mangled,
         show_metadata: args.show_metadata,
     };
-    capabara::print::print_symbols(&args.binary_path, filtered_symbols, options)?;
+    capabara::print::print_symbols(&args.binary_path, &filtered_symbols, &options)?;
     Ok(())
 }
