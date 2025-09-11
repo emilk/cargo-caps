@@ -23,7 +23,7 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions)
             if max_depth == 0 {
                 // Show count only when max depth is reached
                 let total_symbols = tree.symbol_count();
-                println!("{}└── ({} symbols)", prefix, total_symbols);
+                println!("{prefix}└── ({total_symbols} symbols)");
             } else {
                 let child_entries: Vec<_> = children.iter().collect();
                 for (i, (name, child)) in child_entries.iter().enumerate() {
@@ -42,13 +42,13 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions)
                         }
                         Tree::Node(_) => {
                             let count = child.symbol_count();
-                            println!("{}{} {} ({} symbols)", prefix, item_prefix, name, count);
+                            println!("{prefix}{item_prefix} {name} ({count} symbols)");
 
                             // Only recurse if we haven't reached the max depth
                             if max_depth > 1 {
                                 print_tree(
                                     child,
-                                    &format!("{}{}", prefix, child_prefix),
+                                    &format!("{prefix}{child_prefix}"),
                                     max_depth - 1,
                                     options,
                                 );
@@ -72,7 +72,7 @@ pub fn print_symbols(
     if depth == 0 {
         let total_symbols = symbols.len();
         println!("{}", binary_path.display());
-        println!("└── {} total symbols", total_symbols);
+        println!("└── {total_symbols} total symbols");
         return Ok(());
     }
 
@@ -87,7 +87,7 @@ pub fn print_symbols(
         let path_segments: Vec<&str> = filter_path.split('/').collect();
         if let Some(filtered_tree) = filter_tree_by_path(&tree, &path_segments) {
             tree = filtered_tree;
-            display_path = format!("{}/{}", display_path, filter_path);
+            display_path = format!("{display_path}/{filter_path}");
         } else {
             println!("{}/{}", binary_path.display(), filter_path);
             println!("└── (no symbols found)");
@@ -96,7 +96,7 @@ pub fn print_symbols(
     }
 
     // Print the file path as root
-    println!("{}", display_path);
+    println!("{display_path}");
 
     // Print the entire tree using the single print_tree function
     print_tree(&tree, "", depth, &options);

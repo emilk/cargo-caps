@@ -122,7 +122,7 @@ impl DeducedCapablities {
                             "Weird crate name: {crate_name:?} in symbol {symbol:?}"
                         );
                         self.unknown_crates
-                            .entry(crate_name.to_string())
+                            .entry(crate_name.to_owned())
                             .or_default()
                             .insert(symbol.clone());
                     }

@@ -22,10 +22,10 @@ pub enum SymbolScope {
 impl fmt::Display for SymbolScope {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SymbolScope::Unknown => write!(f, "unknown"),
-            SymbolScope::Compilation => write!(f, "local"),
-            SymbolScope::Linkage => write!(f, "static"),
-            SymbolScope::Dynamic => write!(f, "dynamic"),
+            Self::Unknown => write!(f, "unknown"),
+            Self::Compilation => write!(f, "local"),
+            Self::Linkage => write!(f, "static"),
+            Self::Dynamic => write!(f, "dynamic"),
         }
     }
 }
@@ -58,13 +58,13 @@ pub enum SymbolKind {
 impl fmt::Display for SymbolKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SymbolKind::Unknown => write!(f, "unknown"),
-            SymbolKind::Text => write!(f, "function"),
-            SymbolKind::Data => write!(f, "data"),
-            SymbolKind::Section => write!(f, "section"),
-            SymbolKind::File => write!(f, "file"),
-            SymbolKind::Label => write!(f, "label"),
-            SymbolKind::Tls => write!(f, "tls"),
+            Self::Unknown => write!(f, "unknown"),
+            Self::Text => write!(f, "function"),
+            Self::Data => write!(f, "data"),
+            Self::Section => write!(f, "section"),
+            Self::File => write!(f, "file"),
+            Self::Label => write!(f, "label"),
+            Self::Tls => write!(f, "tls"),
         }
     }
 }
@@ -78,8 +78,8 @@ pub enum FunctionOrPath {
 impl fmt::Display for FunctionOrPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FunctionOrPath::Function(name) => write!(f, "{name}"),
-            FunctionOrPath::RustPath(path) => write!(f, "{path}"),
+            Self::Function(name) => write!(f, "{name}"),
+            Self::RustPath(path) => write!(f, "{path}"),
         }
     }
 }
@@ -90,7 +90,7 @@ impl FunctionOrPath {
             // Example: '__rustc[5224e6b81cd82a8f]::__rust_alloc'
             // Get part after `]::`:
             if let Some(end_bracket) = demangled.find("]::") {
-                vec![FunctionOrPath::Function(
+                vec![Self::Function(
                     demangled[end_bracket + 3..].to_owned(),
                 )]
             } else {
@@ -104,9 +104,9 @@ impl FunctionOrPath {
                 .map(FunctionOrPath::RustPath)
                 .collect()
         } else if demangled.contains("::") {
-            vec![FunctionOrPath::RustPath(RustPath::new(demangled))]
+            vec![Self::RustPath(RustPath::new(demangled))]
         } else {
-            vec![FunctionOrPath::Function(demangled.to_owned())]
+            vec![Self::Function(demangled.to_owned())]
         }
     }
 }
@@ -250,15 +250,15 @@ impl TypeName {
                             let associated_type = &symbol[i + 3..];
                             // dbg!(&type_name, &trait_name, &associated_type);
                             return Ok(Self::AssosiatedPath {
-                                type_name: Box::new(TypeName::parse(type_name)?),
-                                trait_name: Box::new(TypeName::parse(trait_name)?),
+                                type_name: Box::new(Self::parse(type_name)?),
+                                trait_name: Box::new(Self::parse(trait_name)?),
                                 associated_type: RustPath::new(associated_type),
                             });
                         } else {
                             // dbg!(&type_name, &trait_name);
                             return Ok(Self::TypeAsTrait {
-                                type_name: Box::new(TypeName::parse(type_name)?),
-                                trait_name: Box::new(TypeName::parse(trait_name)?),
+                                type_name: Box::new(Self::parse(type_name)?),
+                                trait_name: Box::new(Self::parse(trait_name)?),
                             });
                         }
                     } else {
@@ -312,23 +312,23 @@ impl TypeName {
 
     fn collect_path(&self, paths: &mut Vec<RustPath>) {
         match self {
-            TypeName::RustPath(path) => paths.push(RustPath::new(strip_indirections(path))),
-            TypeName::Slice(element) => {
+            Self::RustPath(path) => paths.push(RustPath::new(strip_indirections(path))),
+            Self::Slice(element) => {
                 element.collect_path(paths);
             }
-            TypeName::Tuple(elements) => {
+            Self::Tuple(elements) => {
                 for elem in elements {
                     elem.collect_path(paths);
                 }
             }
-            TypeName::TypeAsTrait {
+            Self::TypeAsTrait {
                 type_name,
                 trait_name,
             } => {
                 type_name.collect_path(paths);
                 trait_name.collect_path(paths);
             }
-            TypeName::AssosiatedPath {
+            Self::AssosiatedPath {
                 type_name,
                 trait_name,
                 associated_type: _, // Doesn't belong to a crate, so we do not care

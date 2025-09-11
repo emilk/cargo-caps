@@ -16,9 +16,9 @@ pub enum Pattern {
 impl Pattern {
     pub fn from_str(s: &str) -> Self {
         if s.ends_with("::*") {
-            Pattern::StartsWith(s[..s.len() - 3].to_string())
+            Self::StartsWith(s[..s.len() - 3].to_string())
         } else {
-            Pattern::Exact(s.to_string())
+            Self::Exact(s.to_owned())
         }
     }
 }
@@ -43,13 +43,13 @@ struct SerializedRule {
     /// Capabilities for this rule
     caps: BTreeSet<Capability>,
 
-    /// String patterns that will be converted to Match using Match::from_str
+    /// String patterns that will be converted to Match using `Match::from_str`
     patterns: BTreeSet<String>,
 }
 
 impl From<SerializedRule> for Rule {
     fn from(rule: SerializedRule) -> Self {
-        Rule {
+        Self {
             caps: rule.caps,
             pattern: rule
                 .patterns

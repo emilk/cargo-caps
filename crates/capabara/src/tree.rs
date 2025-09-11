@@ -27,20 +27,20 @@ impl Tree {
     /// Get the count of symbols in this tree
     pub fn symbol_count(&self) -> usize {
         match self {
-            Tree::Leaf(_) => 1,
-            Tree::Node(children) => children.values().map(|child| child.symbol_count()).sum(),
+            Self::Leaf(_) => 1,
+            Self::Node(children) => children.values().map(|child| child.symbol_count()).sum(),
         }
     }
 
     pub fn is_leaf(&self) -> bool {
-        matches!(self, Tree::Leaf(_))
+        matches!(self, Self::Leaf(_))
     }
 
     /// Collapse nodes that contain only a single leaf, recursively
     pub fn collapse_single_nodes(self, depth: usize, may_collapse: bool) -> Self {
         match self {
-            Tree::Leaf(_) => self,
-            Tree::Node(mut children) => {
+            Self::Leaf(_) => self,
+            Self::Node(mut children) => {
                 // First, recursively collapse all children
                 let may_collapse_child = children.len() == 1;
                 for child in children.values_mut() {
@@ -55,7 +55,7 @@ impl Tree {
                 {
                     children.into_iter().next().unwrap().1
                 } else {
-                    Tree::Node(children)
+                    Self::Node(children)
                 }
             }
         }
@@ -79,7 +79,7 @@ fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
         };
 
         grouped
-            .entry(prefix.to_string())
+            .entry(prefix.to_owned())
             .or_default()
             .push(symbol.clone());
     }
@@ -209,7 +209,7 @@ pub fn filter_tree_by_path(tree: &Tree, path: &[&str]) -> Option<Tree> {
                 if let Some(filtered_child) = filter_tree_by_path(child, remaining_path) {
                     // Create a new tree with only the path to the filtered content
                     let mut new_children = BTreeMap::new();
-                    new_children.insert(first_segment.to_string(), filtered_child);
+                    new_children.insert(first_segment.to_owned(), filtered_child);
                     Some(Tree::Node(new_children))
                 } else {
                     None
@@ -240,7 +240,7 @@ fn insert_symbol_into_tree(
         current_node.insert(symbol.demangled.clone(), Tree::Leaf(symbol));
     } else {
         // This is an intermediate node - recurse deeper
-        let current_part = parts[0].to_string();
+        let current_part = parts[0].to_owned();
         let remaining_parts = &parts[1..];
 
         // Get or create the child node

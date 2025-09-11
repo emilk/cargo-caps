@@ -4,9 +4,9 @@ use std::{
     path::Path,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use object::{
-    Object, ObjectSymbol, SymbolKind as ObjectSymbolKind, SymbolScope as ObjectSymbolScope,
+    Object as _, ObjectSymbol as _, SymbolKind as ObjectSymbolKind, SymbolScope as ObjectSymbolScope,
 };
 
 use crate::symbol::{Symbol, SymbolKind, SymbolScope};
@@ -115,7 +115,7 @@ fn collect_file_symbols(all_symbols: &mut Vec<Symbol>, file: &object::File<'_>) 
                 _ => SymbolKind::Unknown,
             };
 
-            all_symbols.push(Symbol::with_metadata(name.to_string(), scope, kind));
+            all_symbols.push(Symbol::with_metadata(name.to_owned(), scope, kind));
         }
     }
 }

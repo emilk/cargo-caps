@@ -94,13 +94,13 @@ impl Deref for RustPath {
 
 impl From<String> for RustPath {
     fn from(path: String) -> Self {
-        RustPath::new(path)
+        Self::new(path)
     }
 }
 
 impl From<&str> for RustPath {
     fn from(path: &str) -> Self {
-        RustPath::new(path.to_string())
+        Self::new(path.to_owned())
     }
 }
 

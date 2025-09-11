@@ -67,7 +67,7 @@ fn print_capabilities(
 
         for (capability, reasons) in &capabilities.caps {
             let icon = capability_icon(capability);
-            println!("  {} {:?}", icon, capability);
+            println!("  {icon} {capability:?}");
 
             if (verbose || capability == &Capability::Any) && !reasons.is_empty() {
                 println!("    Reasons ({} symbols):", reasons.len());
@@ -122,13 +122,13 @@ fn print_capabilities(
     let total_unknown_symbols = capabilities.unknown_symbols.len();
 
     println!("📊 Summary:");
-    println!("  • Capabilities detected: {}", total_capabilities);
-    println!("  • External crates: {}", total_unknown_crates);
-    println!("  • Unclassified symbols: {}", total_unknown_symbols);
+    println!("  • Capabilities detected: {total_capabilities}");
+    println!("  • External crates: {total_unknown_crates}");
+    println!("  • Unclassified symbols: {total_unknown_symbols}");
 }
 
 fn capability_icon(capability: &capabara::capability::Capability) -> &'static str {
-    use capabara::capability::Capability::*;
+    use capabara::capability::Capability::{Panic, Alloc, Time, Sysinfo, Stdio, Thread, Net, Fopen, Any};
     match capability {
         Panic => "💥",
         Alloc => "🧠",
