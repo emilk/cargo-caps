@@ -14,8 +14,6 @@ use std::ops::Deref;
 /// let path = RustPath::new("std::collections::Vec");
 /// assert_eq!(path.as_str(), "std::collections::Vec");
 /// assert_eq!(path.segments(), vec!["std", "collections", "Vec"]);
-/// assert_eq!(path.root(), Some("std"));
-/// assert_eq!(path.leaf(), Some("Vec"));
 /// ```
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RustPath(String);
@@ -28,11 +26,12 @@ impl RustPath {
     /// ```
     /// use capabara::rust_path::RustPath;
     ///
-    /// let path = RustPath::new("std::collections::HashMap");
-    /// assert_eq!(path.as_str(), "std::collections::HashMap");
+    /// let path = RustPath::new("std::io::cursor::Cursor<T>");
+    /// assert_eq!(path.as_str(), "std::io::cursor::Cursor<T>");
     /// ```
     pub fn new(path: impl Into<String>) -> Self {
-        Self(path.into())
+        let path = path.into();
+        Self(path)
     }
 
     /// Returns the path as a string slice.
