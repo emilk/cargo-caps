@@ -4,6 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "symbols"
+path = "bin/symbols.rs"
+
 [dependencies]
 anyhow = "1.0"
 ar = "0.9"

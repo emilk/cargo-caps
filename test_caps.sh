@@ -43,8 +43,8 @@ echo "Building test_caps with features: ${FEATURES:-none}"
 cargo build --release -p test_caps $CARGO_FEATURES
 
 # Build the main capabara binary if needed
-echo "Building capabara..."
-cargo build --release -p capabara
+echo "Building symbols binary..."
+cargo build --release --bin symbols
 
 # Run capabara on the built test_caps library
 RLIB_PATH="target/release/deps/libtest_caps-*.rlib"
@@ -52,7 +52,7 @@ if ls $RLIB_PATH 1> /dev/null 2>&1; then
     RLIB_FILE=$(ls $RLIB_PATH | head -1)
     echo "Running capabara on: $RLIB_FILE"
 
-    cargo run --release -p capabara -- "$RLIB_FILE" "${CAPABARA_ARGS[@]}"
+    cargo run --release --bin symbols -- "$RLIB_FILE" "${CAPABARA_ARGS[@]}"
 else
     echo "Error: Could not find libtest_caps-*.rlib in target/release/deps/"
     echo "Make sure the build completed successfully."

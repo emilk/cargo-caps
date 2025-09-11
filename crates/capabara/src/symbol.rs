@@ -1,7 +1,6 @@
 use std::fmt;
 
-use crate::demangle::demangle_symbol;
-use crate::print::PrintOptions;
+use crate::{demangle::demangle_symbol, print::PrintOptions, rust_path::RustPath};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SymbolScope {
@@ -115,9 +114,9 @@ impl Symbol {
 pub struct TraitFnImpl {
     /// Could be a built-in type!
     /// Could also start with `&` for references
-    pub type_name: String,
+    pub type_name: RustPath,
 
-    pub trait_name: String,
+    pub trait_name: RustPath,
     pub function_name: String,
 }
 
@@ -166,8 +165,7 @@ impl TraitFnImpl {
         Err("Not a trait implementation symbol")
     }
 
-    /// Path to a type or trait, e.g. `std::io::Write`
-    pub fn paths(&self) -> Vec<String> {
+    pub fn paths(&self) -> Vec<RustPath> {
         // How do we categorize this?
         // This could be `impl ForeignTrait for LocalType`
         // or `impl LocalTrait for ForeignType`
@@ -185,8 +183,8 @@ impl TraitFnImpl {
     }
 }
 
-fn normalize_type_path(path: &str) -> String {
-    strip_indirections(&path.replace("..", "::")).to_owned()
+fn normalize_type_path(path: &str) -> RustPath {
+    RustPath::new(strip_indirections(&path.replace("..", "::")).to_owned())
 }
 
 fn strip_indirections(path: &str) -> &str {

@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use crate::symbol::{Symbol, TraitFnImpl};
+use crate::{
+    rust_path::RustPath,
+    symbol::{Symbol, TraitFnImpl},
+};
 
 #[derive(Debug, Clone)]
 pub enum Tree {
@@ -126,26 +129,30 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
             // Get part after `]::`:
             if let Some(end_bracket) = demangled.find("]::") {
                 symbol.demangled = demangled[end_bracket + 3..].to_owned();
-                tree_from_symbol(category, &symbol);
+                insert_leaf(category, &symbol);
             } else {
-                tree_from_symbol(category, &symbol);
+                insert_leaf(category, &symbol);
             }
         } else if let Ok(trait_impl) = TraitFnImpl::parse(demangled) {
             symbol.demangled = trait_impl.to_string();
 
             for path in trait_impl.paths() {
-                let path_parts: Vec<&str> = path.split("::").collect();
-                if path_parts.len() == 1 {
+                let segments = path.segments();
+                if segments.len() == 1 {
                     // Probably a built-in type, like [T]
                 } else {
-                    let crate_name = path_parts[0];
+                    let crate_name = segments[0];
                     let category = crate_category(&mut root, crate_name);
-                    insert_symbol_into_tree(category, &path_parts, symbol.clone());
+                    insert_symbol_into_tree(category, &segments, symbol.clone());
                 }
             }
-        } else if let Some(first_colon) = demangled.find("::") {
-            let crate_name = &demangled[..first_colon];
-            add_crate_symbol(&mut root, crate_name, &symbol);
+        } else if demangled.contains("::") {
+            let path = RustPath::new(demangled);
+            let segments = path.segments();
+            debug_assert!(segments.len() > 1);
+            let crate_name = segments[0];
+            let category = crate_category(&mut root, crate_name);
+            insert_symbol_into_tree(category, &segments, symbol.clone());
         } else {
             let category = get_or_create_category(&mut root, "system");
             let name = &symbol.demangled;
@@ -163,7 +170,7 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
                 name
             };
             let sub_category = get_or_create_category(category, system_category);
-            tree_from_symbol(sub_category, &symbol);
+            insert_leaf(sub_category, &symbol);
         }
     }
 
@@ -183,15 +190,6 @@ fn crate_category(
         root
     } else {
         get_or_create_category(root, "crates")
-    }
-}
-
-fn add_crate_symbol(root: &mut BTreeMap<String, Tree>, crate_name: &str, symbol: &Symbol) {
-    if is_standard_crate(crate_name) {
-        tree_from_symbol(root, symbol);
-    } else {
-        let category = get_or_create_category(root, "crates");
-        tree_from_symbol(category, symbol);
     }
 }
 
@@ -223,9 +221,8 @@ pub fn filter_tree_by_path(tree: &Tree, path: &[&str]) -> Option<Tree> {
     }
 }
 
-fn tree_from_symbol(root: &mut BTreeMap<String, Tree>, symbol: &Symbol) {
-    let parts: Vec<&str> = symbol.demangled.split("::").collect();
-    insert_symbol_into_tree(root, &parts, symbol.clone());
+fn insert_leaf(root: &mut BTreeMap<String, Tree>, symbol: &Symbol) {
+    root.insert(symbol.demangled.clone(), Tree::Leaf(symbol.clone()));
 }
 
 // Recursively insert a symbol into the tree based on its path parts

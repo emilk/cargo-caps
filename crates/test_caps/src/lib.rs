@@ -1,16 +1,8 @@
+#![allow(unused_imports, unreachable_code, clippy::unwrap_used)]
+
 use std::hint::black_box;
 
 pub fn test_capabilities() {
-    #[cfg(feature = "abort")]
-    {
-        std::process::abort();
-    }
-
-    #[cfg(feature = "exit")]
-    {
-        std::process::exit(1);
-    }
-
     #[cfg(feature = "panic")]
     {
         panic!("Intentional");

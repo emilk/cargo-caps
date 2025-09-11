@@ -6,8 +6,6 @@ rust-version.workspace = true
 
 [features]
 default = []
-abort = []
-exit = []
 panic = []
 alloc = []
 time = []
@@ -19,8 +17,6 @@ net = []
 fread = []
 fwrite = []
 all = [
-    "abort",
-    "exit",
     "panic",
     "alloc",
     "time",

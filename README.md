@@ -18,9 +18,7 @@ Only tested on macOS.
 ## Capabilities
 Some that come to mind:
 
-- `abort`
-- `exit`
-- `panic`
+- `panic` (anything in `std`, and some of `core`)
 - `alloc`
 - `time` - measuring time, telling current time
 - `signal` - installing signal handlers
@@ -33,6 +31,7 @@ Some that come to mind:
 We also have `None` for the empty set an `All` for the complete set.
 
 Thing that will get you put in the `All` bucket includes calling into an opaque library, or starting another process.
+
 
 ## Unix `FILE`:s
 `fwrite/fread` can be used on any FILE, including network sockets, BUT is NOT considered a high capability.
