@@ -11,6 +11,7 @@ use object::{
 
 use crate::symbol::{Symbol, SymbolKind, SymbolScope};
 
+pub mod cap_rule;
 pub mod capability;
 pub mod demangle;
 pub mod print;

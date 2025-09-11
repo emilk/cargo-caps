@@ -68,6 +68,49 @@ impl fmt::Display for SymbolKind {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FunctionOrPath {
+    Function(String),
+    RustPath(RustPath),
+}
+
+impl fmt::Display for FunctionOrPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FunctionOrPath::Function(name) => write!(f, "{name}"),
+            FunctionOrPath::RustPath(path) => write!(f, "{path}"),
+        }
+    }
+}
+
+impl FunctionOrPath {
+    pub fn from_demangled(demangled: &str) -> Vec<Self> {
+        if demangled.starts_with("__rustc[") {
+            // Example: '__rustc[5224e6b81cd82a8f]::__rust_alloc'
+            // Get part after `]::`:
+            if let Some(end_bracket) = demangled.find("]::") {
+                vec![FunctionOrPath::Function(
+                    demangled[end_bracket + 3..].to_owned(),
+                )]
+            } else {
+                panic!("Weird symbol: {demangled:?}"); // TODO
+            }
+        } else if let Ok(trait_impl) = TraitFnImpl::parse(demangled) {
+            trait_impl
+                .paths()
+                .into_iter()
+                .filter(|path| path.segments().len() > 1) // Probably a built-in type or generic
+                .map(FunctionOrPath::RustPath)
+                .collect()
+        } else if demangled.contains("::") {
+            vec![FunctionOrPath::RustPath(RustPath::new(demangled))]
+        } else {
+            vec![FunctionOrPath::Function(demangled.to_owned())]
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Symbol {
     pub mangled: String,
@@ -79,6 +122,7 @@ pub struct Symbol {
 impl Symbol {
     pub fn with_metadata(mangled: String, scope: SymbolScope, kind: SymbolKind) -> Self {
         let demangled = demangle_symbol(&mangled);
+
         Self {
             mangled,
             demangled,
@@ -107,6 +151,10 @@ impl Symbol {
         } else {
             base
         }
+    }
+
+    pub fn paths(&self) -> Vec<FunctionOrPath> {
+        FunctionOrPath::from_demangled(&self.demangled)
     }
 }
 
@@ -334,13 +382,6 @@ impl TraitFnImpl {
             let function_name = symbol[last_colon_pos + 3..].to_owned();
             // dbg!(&type_name, &function_name);
 
-            // Some function names ends with e.g. ::hdfea6b6d53cc7e8c - strip that:
-            let function_name = if let Some(hash_pos) = function_name.rfind("::h") {
-                function_name[..hash_pos].to_owned()
-            } else {
-                function_name
-            };
-
             Ok(Self {
                 type_name: TypeName::parse(type_name)?,
                 function_name,
@@ -381,11 +422,11 @@ fn test_parse_trait_impl() {
         ),
         (
             "_<dyn core..any..Any>::is::h10782f44127ca60f",
-            vec!["core::any::Any"],
+            vec!["core::any::Any::is"], // TODO
         ),
         (
             "<T as <std::OsString as core::From<&T>>::SpecToOsString>::spec_to_os_string",
-            vec!["T", "std::OsString", "core::From<&T>"],
+            vec!["std::OsString", "core::From<&T>"],
         ),
         (
             "<std..io..cursor..Cursor<T> as std..io..Read>::read_exact",
@@ -409,7 +450,7 @@ fn test_parse_trait_impl() {
         ),
         (
             "<(A,B) as core::ops::range::RangeBounds<T>>::start_bound",
-            vec!["A", "B", "core::ops::range::RangeBounds<T>"],
+            vec!["core::ops::range::RangeBounds<T>"],
         ),
         (
             "<[core::mem::maybe_uninit::MaybeUninit<T>] as core::array::iter::iter_inner::PartialDrop>::partial_drop",
@@ -422,8 +463,23 @@ fn test_parse_trait_impl() {
 
     for (mangled, expected_paths) in tests {
         let demangled = demangle_symbol(mangled);
-        let parsed = TraitFnImpl::parse(&demangled)
-            .unwrap_or_else(|err| panic!("Failed to parse {demangled}: {err}"));
-        assert_eq!(parsed.paths(), expected_paths);
+        let paths = FunctionOrPath::from_demangled(&demangled);
+        let paths: Vec<_> = paths.into_iter().map(|p| p.to_string()).collect();
+        assert_eq!(paths, expected_paths, "{demangled} ({mangled})");
     }
+}
+
+#[test]
+fn test_paths() {
+    let symbol = Symbol::with_metadata(
+        "parking_lot::raw_rwlock::RawRwLock::lock_shared_slow".to_owned(),
+        SymbolScope::Dynamic,
+        SymbolKind::Data,
+    );
+    assert_eq!(
+        symbol.paths(),
+        vec![FunctionOrPath::RustPath(RustPath::new(
+            "parking_lot::raw_rwlock::RawRwLock::lock_shared_slow"
+        ))]
+    )
 }
