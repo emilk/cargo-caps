@@ -31,21 +31,31 @@ We also have `None` for the empty set an `All` for the complete set.
 
 Thing that will get you put in the `All` bucket includes calling into an opaque library, or starting another process.
 
+## Installation
+`cargo install --path ./crates/cargo-caps/`
 
-## Unix `FILE`:s
+## TODO
+- [ ] Read through and clean up the code
+- [ ] Fix all TODOs
+- [ ] Write docs
+
+
+
+## Details
+### Unix `FILE`:s
 `fwrite/fread` can be used on any FILE, including network sockets, BUT is NOT considered a high capability.
 Only _opening_ a FILE requires capability. To be able to write to a FILE you first need to open it, OR another crate must hand you that FILE handle, thus handing you the capability.
 
 Similarly with dynamic calls: a crate that calls some callback is not responsible for the capabilities of that callback.
 
 
-## Standard capabilities
+### Standard capabilities
 We start by assigning capabilities to different part of the Rust standard library: `std::net` for networking, `std::fs` for file system access, etc. If a crate uses any part of these, they are marked as having that capability.
 
 We do the same for common sys-calls.
 
 
-## Signing edge crates
+### Signing edge crates
 For some crates (hopefull most!), the capabilities is just the union of the capabilities of all its  dependent crates.
 This means that if we have accurate capabilities for all the crates it depend on, we can confidently assign capabilities to the crate without having to audit it.
 
@@ -59,9 +69,3 @@ Another example: `ffmpeg-sidecar` is a crate that starts and controls an `ffmpeg
 If you trust ffmpeg not to do any shenanigans, then you could sign `ffmpeg-sidecar` to be excluded for `Net` and `FileSystem` capbilties.
 
 Currently a Rust developer ha to verify _all_ dependencies it pulls in (even transitive ones!), but with capabara you only need to trust these (hopefully few) _edge_ crates.
-
-
-## TODO
-- [ ] Read through and clean up the code
-- [ ] Fix all TODOs
-- [ ] Write docs

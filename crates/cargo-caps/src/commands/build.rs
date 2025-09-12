@@ -31,10 +31,23 @@ pub struct BuildCommand {
 
     #[arg(short = 'q', long = "quiet")]
     pub quiet: bool,
+
+    /// Capabilities to ignore when displaying results (comma-separated, lowercase)
+    #[arg(long = "ignored-caps", default_value = "alloc,panic")]
+    pub ignored_caps: String,
+
+    /// Show crates with no capabilities after filtering
+    #[arg(long = "show-empty")]
+    pub show_empty: bool,
 }
 
 impl BuildCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
+        // Inform user about ignored capabilities if any are specified
+        if !self.ignored_caps.is_empty() {
+            println!("Ignoring capabilities: {}", self.ignored_caps);
+        }
+
         let mut cmd = self.make_cargo_command();
 
         let mut child = cmd.stdout(Stdio::piped()).spawn()?;
@@ -42,7 +55,7 @@ impl BuildCommand {
         let stdout = child.stdout.take().unwrap();
         let reader = BufReader::new(stdout);
 
-        let mut analyzer = CapsAnalyzer::new();
+        let mut analyzer = CapsAnalyzer::new(&self.ignored_caps, self.show_empty);
 
         for line in reader.lines() {
             let line = line?;

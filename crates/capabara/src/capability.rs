@@ -8,9 +8,11 @@ use crate::{
     symbol::FunctionOrPath,
 };
 
+pub type CapabilitySet = BTreeSet<Capability>;
+
 /// A capability a crate can be granted,
 /// or is suspected of having.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Capability {
     /// Call [`panic!`]
     Panic,
@@ -52,17 +54,18 @@ impl Capability {
             Thread => "🧵",
             Net => "🌐",
             Fopen => "📁",
-            Any => "⚠️",
+            Any => "⚠️ ",
         }
     }
 }
 
+#[derive(Clone)]
 pub struct DeducedCapablities {
     /// The known capabilities of this crate
     pub own_caps: BTreeMap<Capability, Reasons>,
 
     /// The crates we depend on that we know the capabilities of
-    pub known_crates: BTreeMap<String, BTreeSet<Capability>>,
+    pub known_crates: BTreeMap<String, CapabilitySet>,
 
     /// We couldn't classify these symbols
     pub unknown_symbols: BTreeSet<Symbol>,
@@ -100,7 +103,7 @@ impl DeducedCapablities {
         slf
     }
 
-    pub fn total_capabilities(&self) -> BTreeSet<Capability> {
+    pub fn total_capabilities(&self) -> CapabilitySet {
         let Self {
             own_caps,
             known_crates,

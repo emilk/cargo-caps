@@ -4,9 +4,21 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 
 [workspace.dependencies]
+anyhow = "1.0"
+ar = "0.9"
+cargo_metadata = "0.22"
+clap = { version = "4.0", features = ["derive"] }
+cpp_demangle = "0.4"
+itertools = "0.14"
+log-once = "0.4.1"
+object = "0.37.3"
+ron = "0.11"
+rustc-demangle = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 
 [workspace.lints.rust]
@@ -173,7 +185,7 @@ suspicious_command_arg_space = "warn"
 suspicious_xor_used_as_pow = "warn"
 todo = "warn"
 too_long_first_doc_paragraph = "warn"
-too_many_lines = "warn"
+# too_many_lines = "warn" // TODO
 trailing_empty_array = "warn"
 trait_duplication_in_bounds = "warn"
 transmute_ptr_to_ptr = "warn"

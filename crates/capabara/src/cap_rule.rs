@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::capability::Capability;
+use crate::capability::CapabilitySet;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Pattern {
@@ -29,7 +29,7 @@ pub struct Rule {
     pub pattern: BTreeSet<Pattern>,
 
     /// …then it is known to have these, and only these, capabitites
-    pub caps: BTreeSet<Capability>,
+    pub caps: CapabilitySet,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ pub struct Rules {
 #[derive(Debug, Clone, Deserialize)]
 struct SerializedRule {
     /// Capabilities for this rule
-    caps: BTreeSet<Capability>,
+    caps: CapabilitySet,
 
     /// String patterns that will be converted to Match using `Match::from_str`
     patterns: BTreeSet<String>,
@@ -62,7 +62,7 @@ impl From<SerializedRule> for Rule {
 
 impl Rules {
     /// Find the most specific matching rule for a symbol
-    pub fn match_symbol(&self, symbol: &str) -> Option<&BTreeSet<Capability>> {
+    pub fn match_symbol(&self, symbol: &str) -> Option<&CapabilitySet> {
         let mut best_match: Option<(&Rule, usize)> = None;
 
         for rule in &self.rules {

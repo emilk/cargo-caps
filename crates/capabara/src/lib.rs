@@ -10,8 +10,11 @@ use object::{
     SymbolScope as ObjectSymbolScope,
 };
 
+pub use capability::{CapabilitySet, Capability};
+
 use crate::symbol::{Symbol, SymbolKind, SymbolScope};
 
+// TODO: less pub here
 pub mod cap_rule;
 pub mod capability;
 pub mod demangle;

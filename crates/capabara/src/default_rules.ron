@@ -7,6 +7,8 @@
             // Curiously, they only show up in optimized builds.
             "anon.*",
 
+            // NOTE: cargo-caps ignored leading underscores
+
             // Simple memory stuff:
             "bzero",
             "memcmp",
@@ -16,24 +18,43 @@
             "memset_pattern*",
 
             // Math:
+            "acos",
+            "acos",
+            "acosf",
+            "atan2",
             "atan2f",
+            "cbrt",
+            "cbrtf",
             "cos",
+            "cosf",
             "exp10",
             "expf",
             "fmod",
             "fmodf",
             "hypotf",
             "log10",
+            "pow",
+            "powf",
             "powidf2",
+            "powisf2",
             "sin",
             "sincos_stret",
             "sincosf_stret",
+            "sinf",
+            "tanf",
+
+            "pthread_cond_*",
+            "pthread_mutex_*",
+            "close", // Closing a FILE is fine
 
             // Thread Local Variable
             "tlv_bootstrap",
 
-            // Modulus (TODO: support more of these)
-            "umodti3",
+            "muloti*", // Multiply?
+            "sdiv*", // unsignd div
+            "smod*", // unsigned modulus
+            "udiv*", // unsignd div
+            "umod*", // unsigned modulus
 
             "Unwind_Resume", // Rust exception handling
             "rust_eh_personality", // Rust exception handling
@@ -41,15 +62,22 @@
         ],
     ),
     (
-        caps: [ ],
+        caps: [ Sysinfo ],
         patterns: [
-            "core::*" // core has no capabilities
+            "isatty"
         ],
     ),
     (
-        caps: [ Sysinfo],
+        caps: [ Time ],
         patterns: [
-            "isatty"
+            "gettimeofday"
+        ],
+    ),
+    (
+        caps: [ ],
+        patterns: [
+            // core has no capabilities
+            "core::*",
         ],
     ),
     (
@@ -106,12 +134,27 @@
             "std::process::exit::*", // TODO: consider adding special capability for abort/exit
             "std::sync::*",
             "std::sys::os_str::*",
-            "std::sys::pal::unix::abort_internal::*",
+            "std::sys::pal::unix::abort_internal*",
             "std::sys::pal::unix::sync::*",
             "std::sys::random::*", // TODO: consider adding special capability for random
             "std::sys::sync::*",
             "std::sys::thread_local::*",
             "std::thread::local::*",
+
+            // I doubt these allocate, but 🤷
+            "std::char::*",
+            "std::f32::*",
+            "std::f64::*",
+            "std::i128::*",
+            "std::i16::*",
+            "std::i32::*",
+            "std::i64::*",
+            "std::i8::*",
+            "std::u128::*",
+            "std::u16::*",
+            "std::u32::*",
+            "std::u64::*",
+            "std::u8::*",
         ],
     ),
     (
@@ -150,6 +193,7 @@
             Fopen,
         ],
         patterns: [
+            "fcntl",
             "std::fs::*",
             "std::path::*",
             "std::sys::pal::unix::fs::*",
