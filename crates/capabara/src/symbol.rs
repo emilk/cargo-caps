@@ -86,8 +86,8 @@ impl fmt::Display for FunctionOrPath {
 
 impl FunctionOrPath {
     pub fn from_demangled(demangled: &str) -> Vec<Self> {
-        if demangled.starts_with("__rustc[") {
-            // Example: '__rustc[5224e6b81cd82a8f]::__rust_alloc'
+        if demangled.starts_with("rustc[") {
+            // Example: 'rustc[5224e6b81cd82a8f]::__rust_alloc'
             // Get part after `]::`:
             if let Some(end_bracket) = demangled.find("]::") {
                 vec![Self::Function(demangled[end_bracket + 3..].to_owned())]

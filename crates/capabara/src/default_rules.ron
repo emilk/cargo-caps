@@ -16,9 +16,9 @@
             "memmove",
             "memset",
             "memset_pattern*",
+            ".memset_pattern.llvm*",
 
             // Math:
-            "acos",
             "acos",
             "acosf",
             "atan2",
@@ -27,12 +27,22 @@
             "cbrtf",
             "cos",
             "cosf",
+            "exp",
             "exp10",
+            "exp10f",
+            "exp2",
+            "exp2f",
             "expf",
             "fmod",
             "fmodf",
+            "hypot",
             "hypotf",
+            "log",
             "log10",
+            "log10f",
+            "log2",
+            "log2f",
+            "logf",
             "pow",
             "powf",
             "powidf2",
@@ -41,6 +51,7 @@
             "sincos_stret",
             "sincosf_stret",
             "sinf",
+            "tan",
             "tanf",
 
             "pthread_cond_*",
@@ -125,21 +136,28 @@
             Alloc, Panic,
         ],
         patterns: [
+            "std::backtrace::*",
             "std::collections::*",
+            "std::ffi::os_str::*",
             "std::hash::*",
             "std::panic::*",
             "std::panicking::*",
             "std::path::Path::extension::*",
-            "std::process::abort::*", // TODO: consider adding special capability for abort/exit
-            "std::process::exit::*", // TODO: consider adding special capability for abort/exit
+            "std::path::PathBuf", // NOT ::*, but just `<std::path::PathBuf as core::clone::Clone>::clone` is OK
+            "std::process::abort*", // TODO: consider adding special capability for abort/exit
+            "std::process::exit*", // TODO: consider adding special capability for abort/exit
             "std::sync::*",
             "std::sys::os_str::*",
             "std::sys::pal::unix::abort_internal*",
             "std::sys::pal::unix::sync::*",
+            "std::sys::process::unix::common::cstring_array::*",
             "std::sys::random::*", // TODO: consider adding special capability for random
             "std::sys::sync::*",
             "std::sys::thread_local::*",
+            "std::thread::current::current",
             "std::thread::local::*",
+            "std::thread::Thread::id",
+            "std::thread::ThreadId*",
 
             // I doubt these allocate, but 🤷
             "std::char::*",
@@ -165,6 +183,7 @@
         patterns: [
             "std::env::*",
             "std::sys::backtrace::*",
+            "std::sys::io::is_terminal::*",
         ],
     ),
     (
@@ -173,7 +192,7 @@
             Thread,
         ],
         patterns: [
-            "std::sys::pal::unix::thread::Thread::*",
+            "std::sys::pal::unix::thread::Thread*",
             "std::thread::*",
         ],
     ),
@@ -190,12 +209,13 @@
     (
         caps: [
             Alloc, Panic,
-            Fopen,
+            FS,
         ],
         patterns: [
             "fcntl",
             "std::fs::*",
             "std::path::*",
+            "std::sys::fs::*",
             "std::sys::pal::unix::fs::*",
         ],
     ),

@@ -1,9 +1,10 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::{Path, PathBuf},
 };
 
 use capabara::capability::{Capability, CapabilitySet, DeducedCapablities};
+use cargo_metadata::{Artifact, camino::Utf8PathBuf};
 use itertools::Itertools as _;
 
 pub struct CapsAnalyzer {
@@ -22,13 +23,10 @@ impl CapsAnalyzer {
         }
     }
 
-    pub fn add_lib_or_bin(
-        &mut self,
-        crate_name: &str,
-        bin_path: &cargo_metadata::camino::Utf8PathBuf,
-        verbose: bool,
-        features: Option<&[String]>,
-    ) {
+    pub fn add_lib_or_bin(&mut self, artifact: &Artifact, bin_path: &Utf8PathBuf, verbose: bool) {
+        let target = &artifact.target;
+        let crate_name = &target.name;
+        let features = &artifact.features;
         let path = PathBuf::from(bin_path.as_str());
 
         // Analyze capabilities for this rlib
@@ -142,14 +140,16 @@ impl CapsAnalyzer {
 
         println!("{crate_name}: {info}");
         if verbose {
-            println!("  Path: {}", bin_path.as_str());
-            if let Some(features) = features {
-                if features.is_empty() {
-                    println!("  Features: (default)");
-                } else {
-                    println!("  Features: {}", features.join(", "));
-                }
+            println!("  path: {}", bin_path.as_str());
+            if features.is_empty() {
+                println!("  features: (default)");
+            } else {
+                println!("  features: {}", features.join(", "));
             }
+            // println!(
+            //     "  kind: {:?}, crate_types: {:?}",
+            //     &target.kind, &target.crate_types
+            // );
             println!();
         }
     }
@@ -196,7 +196,7 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
                 "stdio" => Some(Capability::Stdio),
                 "thread" => Some(Capability::Thread),
                 "net" => Some(Capability::Net),
-                "fopen" => Some(Capability::Fopen),
+                "fas" => Some(Capability::FS),
                 "any" => Some(Capability::Any),
                 _ => {
                     if !s.is_empty() {

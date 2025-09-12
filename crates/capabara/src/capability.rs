@@ -36,7 +36,7 @@ pub enum Capability {
     Net,
 
     /// Open a file on disk for reading or writing
-    Fopen,
+    FS,
 
     /// Anything is possible, including everything else in this enum.
     Any,
@@ -44,16 +44,16 @@ pub enum Capability {
 
 impl Capability {
     pub fn emoji(&self) -> &'static str {
-        use Capability::{Alloc, Any, Fopen, Net, Panic, Stdio, Sysinfo, Thread, Time};
+        use Capability::{Alloc, Any, FS, Net, Panic, Stdio, Sysinfo, Thread, Time};
         match self {
             Panic => "❗️",
             Alloc => "📦",
             Time => "⏰",
-            Sysinfo => "ℹ️",
+            Sysinfo => "🖥️ ",
             Stdio => "📝",
             Thread => "🧵",
             Net => "🌐",
-            Fopen => "📁",
+            FS => "📁",
             Any => "⚠️ ",
         }
     }

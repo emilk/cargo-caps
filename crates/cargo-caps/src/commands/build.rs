@@ -45,7 +45,8 @@ impl BuildCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
         // Inform user about ignored capabilities if any are specified
         if !self.ignored_caps.is_empty() {
-            println!("Ignoring capabilities: {}", self.ignored_caps);
+            println!("ignored-caps: {}", self.ignored_caps);
+            println!();
         }
 
         let mut cmd = self.make_cargo_command();
@@ -66,12 +67,7 @@ impl BuildCommand {
                 if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
                     for file_path in &artifact.filenames {
                         if file_path.as_str().ends_with(".rlib") {
-                            analyzer.add_lib_or_bin(
-                                &artifact.target.name,
-                                file_path,
-                                self.verbose,
-                                Some(&artifact.features),
-                            );
+                            analyzer.add_lib_or_bin(&artifact, file_path, self.verbose);
                         }
                     }
                 }
@@ -82,7 +78,7 @@ impl BuildCommand {
 
         println!();
         println!(
-            "Run with -v/--verbose to get details about each dependency, or run `cargo-caps info` with the path to a specific .rlib or binary to learn more about it."
+            "Run with -v/--verbose to get details about each dependency, or run `cargo-caps caps` with the path to a specific .rlib or binary to learn more about it."
         );
 
         Ok(())

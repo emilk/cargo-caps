@@ -17,6 +17,8 @@ pub fn demangle_symbol(name: &str) -> String {
         demangled = demangled[..hash_pos].to_owned();
     }
 
+    demangled = demangled.trim_start_matches('_').to_owned(); // So many things start with random count of underscores
+
     demangled
 }
 

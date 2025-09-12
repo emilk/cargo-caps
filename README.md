@@ -25,7 +25,7 @@ Some that come to mind:
 - `stdio`
 - `thread` - spawn threads
 - `net`
-- `fopen` - we don't dinstiguish between read/write since `fopen` makes that hard anyways
+- `fas` - we don't dinstiguish between read/write since `fas` makes that hard anyways
 
 We also have `None` for the empty set an `All` for the complete set.
 
@@ -34,10 +34,6 @@ Thing that will get you put in the `All` bucket includes calling into an opaque 
 ## Installation
 `cargo install --path ./crates/cargo-caps/`
 
-## TODO
-- [ ] Read through and clean up the code
-- [ ] Fix all TODOs
-- [ ] Write docs
 
 
 

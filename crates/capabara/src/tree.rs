@@ -132,9 +132,9 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
     for symbol in symbols {
         let mut symbol = symbol.clone();
         let demangled = &symbol.demangled;
-        if demangled.starts_with("__rustc[") {
+        if demangled.starts_with("rustc[") {
             let category = get_or_create_category(&mut root, "rustc");
-            // Example: '__rustc[5224e6b81cd82a8f]::__rust_alloc'
+            // Example: 'rustc[5224e6b81cd82a8f]::__rust_alloc'
             // Get part after `]::`:
             if let Some(end_bracket) = demangled.find("]::") {
                 symbol.demangled = demangled[end_bracket + 3..].to_owned();
