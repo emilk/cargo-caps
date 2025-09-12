@@ -59,3 +59,9 @@ Another example: `ffmpeg-sidecar` is a crate that starts and controls an `ffmpeg
 If you trust ffmpeg not to do any shenanigans, then you could sign `ffmpeg-sidecar` to be excluded for `Net` and `FileSystem` capbilties.
 
 Currently a Rust developer ha to verify _all_ dependencies it pulls in (even transitive ones!), but with capabara you only need to trust these (hopefully few) _edge_ crates.
+
+
+## TODO
+- [ ] Read through and clean up the code
+- [ ] Fix all TODOs
+- [ ] Write docs
