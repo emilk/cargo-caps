@@ -14,7 +14,13 @@ struct Caps {
 }
 
 impl Caps {
-    fn add_lib_or_bin(&mut self, crate_name: &str, bin_path: &cargo_metadata::camino::Utf8PathBuf) {
+    fn add_lib_or_bin(
+        &mut self,
+        crate_name: &str,
+        bin_path: &cargo_metadata::camino::Utf8PathBuf,
+        verbose: bool,
+        features: Option<&[String]>,
+    ) {
         let path = PathBuf::from(bin_path.as_str());
 
         // Analyze capabilities for this rlib
@@ -25,28 +31,32 @@ impl Caps {
 
         deduced_caps.unknown_crates.remove(crate_name);
 
-        deduced_caps.unknown_crates.retain(|dep_crate_name, _| {
-            if let Some(dep_caps) = self.lib_caps.get(dep_crate_name) {
+        for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
+            if let Some(dep_caps) = self.lib_caps.get(&dep_crate_name) {
                 deduced_caps
                     .known_crates
-                    .entry(dep_crate_name.clone())
+                    .entry(dep_crate_name)
                     .or_default()
                     .extend(dep_caps.total_capabilities());
-                false // no longer unknown
             } else {
-                true // still unknown
+                // We depend on a crate that produced no build artifact.
+                // It means it has no symbols of itself, and all references to it
+                // are really references to this library.
             }
-        });
+        }
 
         // Print short description
-        let cap_names: Vec<String> = deduced_caps
-            .total_capabilities()
-            .iter()
-            .map(|c| format!("{c:?}"))
-            .collect();
-        let cap_list = if cap_names.is_empty() {
-            "none".to_owned()
+        let total_caps = deduced_caps.total_capabilities();
+        let cap_list = if total_caps.is_empty() {
+            "😌 none".to_owned()
+        } else if total_caps.contains(&capabara::capability::Capability::Any) {
+            // If "Any" is present, show only that
+            format!("{} Any", capabara::capability::Capability::Any.emoji())
         } else {
+            let cap_names: Vec<String> = total_caps
+                .iter()
+                .map(|c| format!("{} {c:?}", c.emoji()))
+                .collect();
             cap_names.join(", ")
         };
 
@@ -58,10 +68,18 @@ impl Caps {
             ));
         }
         if !deduced_caps.unknown_symbols.is_empty() {
-            warnings.push(format!(
-                "{} unknown symbols",
-                deduced_caps.unknown_symbols.len()
-            ));
+            let symbol_names: Vec<String> = deduced_caps
+                .unknown_symbols
+                .iter()
+                .take(3)
+                .map(|s| s.format(false))
+                .collect();
+            let symbol_text = if deduced_caps.unknown_symbols.len() > 3 {
+                format!("{}, …", symbol_names.join(", "))
+            } else {
+                symbol_names.join(", ")
+            };
+            warnings.push(format!("unknown symbols: {symbol_text}"));
         }
 
         let warning_text = if warnings.is_empty() {
@@ -70,7 +88,18 @@ impl Caps {
             format!(" ⚠️ {}", warnings.join(", "))
         };
 
-        println!("{crate_name}: [{cap_list}]{warning_text}");
+        println!("{crate_name}: {cap_list}{warning_text}");
+        if verbose {
+            println!("  Path: {}", bin_path.as_str());
+            if let Some(features) = features {
+                if features.is_empty() {
+                    println!("  Features: (default)");
+                } else {
+                    println!("  Features: {}", features.join(", "));
+                }
+            }
+            println!();
+        }
 
         self.lib_caps.insert(crate_name.to_owned(), deduced_caps);
     }
@@ -78,7 +107,9 @@ impl Caps {
 
 fn make_cargo_command(args: &Args) -> Command {
     let mut cmd = Command::new("cargo");
-    cmd.args(["build", "--message-format=json"]);
+
+    // Must be --quiet, or the output of cargo build will interfer with the output of cargo-caps.
+    cmd.args(["build", "--quiet", "--message-format=json"]);
 
     if let Some(package) = &args.package {
         cmd.args(["-p", package]);
@@ -99,10 +130,6 @@ fn make_cargo_command(args: &Args) -> Command {
     if args.release {
         cmd.arg("--release");
     }
-
-    if args.quiet {
-        cmd.arg("--quiet");
-    }
     cmd
 }
 
@@ -110,6 +137,12 @@ fn make_cargo_command(args: &Args) -> Command {
 #[command(name = "cargo-caps")]
 #[command(about = "A tool for analyzing capabilities")]
 struct Args {
+    /// Path to a specific rlib file to analyze (alternative to cargo build mode)
+    rlib_path: Option<PathBuf>,
+
+    #[arg(short = 'v', long = "verbose")]
+    verbose: bool,
+
     #[arg(short = 'p', long = "package")]
     package: Option<String>,
 
@@ -135,37 +168,68 @@ fn deduce_caps_of_binary(path: &Path) -> Option<DeducedCapablities> {
     Some(DeducedCapablities::from_symbols(filtered_symbols))
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let mut cmd = make_cargo_command(&args);
+    // Direct rlib analysis mode
+    if let Some(rlib_path) = &args.rlib_path {
+        if !rlib_path.exists() {
+            anyhow::bail!("Rlib file does not exist: {}", rlib_path.display());
+        }
 
-    let mut child = cmd.stdout(Stdio::piped()).spawn()?;
+        let crate_name = rlib_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
 
-    let stdout = child.stdout.take().unwrap();
-    let reader = BufReader::new(stdout);
+        let mut caps = Caps {
+            lib_caps: HashMap::new(),
+        };
 
-    let mut caps = Caps {
-        lib_caps: HashMap::new(),
-    };
+        let utf8_path = cargo_metadata::camino::Utf8PathBuf::from_path_buf(rlib_path.clone())
+            .map_err(|p| anyhow::anyhow!("Invalid UTF-8 path: {}", p.display()))?;
+        caps.add_lib_or_bin(crate_name, &utf8_path, args.verbose, None);
+    } else {
+        // Cargo build mode
+        let mut cmd = make_cargo_command(&args);
 
-    for line in reader.lines() {
-        let line = line?;
-        if let Ok(message) = serde_json::from_str::<Message>(&line)
-            && let Message::CompilerArtifact(artifact) = message
-        {
-            // Filter for library artifacts
-            if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
-                for file_path in &artifact.filenames {
-                    if file_path.as_str().ends_with(".rlib") {
-                        caps.add_lib_or_bin(&artifact.target.name, file_path);
+        let mut child = cmd.stdout(Stdio::piped()).spawn()?;
+
+        let stdout = child.stdout.take().unwrap();
+        let reader = BufReader::new(stdout);
+
+        let mut caps = Caps {
+            lib_caps: HashMap::new(),
+        };
+
+        for line in reader.lines() {
+            let line = line?;
+            if let Ok(message) = serde_json::from_str::<Message>(&line)
+                && let Message::CompilerArtifact(artifact) = message
+            {
+                // Filter for library artifacts
+                if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
+                    for file_path in &artifact.filenames {
+                        if file_path.as_str().ends_with(".rlib") {
+                            caps.add_lib_or_bin(
+                                &artifact.target.name,
+                                file_path,
+                                args.verbose,
+                                Some(&artifact.features),
+                            );
+                        }
                     }
                 }
             }
         }
-    }
 
-    child.wait()?;
+        child.wait()?;
+
+        println!();
+        println!(
+            "Run with -v/--verbose to get details about each dependency, or run `cargo-caps` with the path to a specific .rlib or binary to leaen more about it."
+        );
+    }
 
     Ok(())
 }

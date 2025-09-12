@@ -15,7 +15,7 @@ pub enum Pattern {
 
 impl Pattern {
     pub fn parse_simple(s: &str) -> Self {
-        if let Some(stripped) = s.strip_suffix("::*") {
+        if let Some(stripped) = s.strip_suffix("*") {
             Self::StartsWith(stripped.to_owned())
         } else {
             Self::Exact(s.to_owned())

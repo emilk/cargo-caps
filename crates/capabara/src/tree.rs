@@ -53,7 +53,11 @@ impl Tree {
                     && children.len() == 1
                     && children.values().next().is_some_and(Self::is_leaf)
                 {
-                    children.into_iter().next().expect("Child node should exist since we checked children.len() == 1").1
+                    children
+                        .into_iter()
+                        .next()
+                        .expect("Child node should exist since we checked children.len() == 1")
+                        .1
                 } else {
                     Self::Node(children)
                 }
@@ -89,7 +93,12 @@ fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
         .into_iter()
         .map(|(prefix, symbols)| {
             let tree = if symbols.len() == 1 {
-                Tree::Leaf(symbols.into_iter().next().expect("symbols vector should have exactly one element"))
+                Tree::Leaf(
+                    symbols
+                        .into_iter()
+                        .next()
+                        .expect("symbols vector should have exactly one element"),
+                )
             } else {
                 Tree::Node(
                     symbols
@@ -136,7 +145,7 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
 
             for path in trait_impl.paths() {
                 let segments = path.segments();
-                if segments.len() == 1 {
+                if segments.len() <= 1 {
                     // Probably a built-in type, like [T]
                 } else {
                     let crate_name = segments[0];
@@ -147,7 +156,10 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
         } else if demangled.contains("::") {
             let path = RustPath::new(demangled);
             let segments = path.segments();
-            debug_assert!(segments.len() > 1, "Rust path should have more than one segment");
+            debug_assert!(
+                segments.len() > 1,
+                "Rust path should have more than one segment"
+            );
             let crate_name = segments[0];
             let category = crate_category(&mut root, crate_name);
             insert_symbol_into_tree(category, &segments, symbol.clone());

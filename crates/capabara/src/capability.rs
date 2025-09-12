@@ -44,15 +44,15 @@ impl Capability {
     pub fn emoji(&self) -> &'static str {
         use Capability::{Alloc, Any, Fopen, Net, Panic, Stdio, Sysinfo, Thread, Time};
         match self {
-            Panic => "💥",
-            Alloc => "🧠", 
+            Panic => "❗️",
+            Alloc => "📦",
             Time => "⏰",
             Sysinfo => "ℹ️",
             Stdio => "📝",
             Thread => "🧵",
             Net => "🌐",
             Fopen => "📁",
-            Any => "🚨",
+            Any => "⚠️",
         }
     }
 }

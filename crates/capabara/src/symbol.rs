@@ -163,6 +163,12 @@ pub enum TypeName {
     /// `std::collection::Vec<T>`
     RustPath(RustPath),
 
+    /// e.g. `&mut `
+    Prefixed {
+        prefix: String,
+        typ: Box<TypeName>,
+    },
+
     Slice(Box<TypeName>),
 
     /// (A, B, C)
@@ -186,6 +192,7 @@ impl fmt::Display for TypeName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::RustPath(path) => write!(f, "{path}"),
+            Self::Prefixed { prefix, typ } => write!(f, "{prefix}{typ}"),
             Self::Slice(element) => write!(f, "[{element}]"),
             Self::Tuple(elements) => {
                 write!(f, "(")?;
@@ -221,6 +228,17 @@ impl TypeName {
         }
 
         // dbg!(symbol);
+
+        let prefixes = ["&", "*", "mut", "const", "dyn", " "];
+
+        for prefix in prefixes {
+            if let Some(rest) = symbol.strip_prefix(prefix) {
+                return Ok(Self::Prefixed {
+                    prefix: prefix.to_owned(),
+                    typ: Box::new(Self::parse(rest)?),
+                });
+            }
+        }
 
         if symbol.starts_with('<') {
             let mut as_pos: Option<usize> = None;
@@ -321,6 +339,9 @@ impl TypeName {
     fn collect_path(&self, paths: &mut Vec<RustPath>) {
         match self {
             Self::RustPath(path) => paths.push(RustPath::new(strip_indirections(path))),
+            Self::Prefixed { typ, .. } => {
+                typ.collect_path(paths);
+            }
             Self::Slice(element) => {
                 element.collect_path(paths);
             }
@@ -345,6 +366,7 @@ impl TypeName {
     }
 }
 
+// TODO: do we need this?
 fn strip_indirections(path: &str) -> &str {
     let prefixes = ["&", "*", "mut", "const", "dyn", " "];
 
@@ -463,6 +485,10 @@ fn test_parse_trait_impl() {
                 "core::mem::maybe_uninit::MaybeUninit<T>",
                 "core::array::iter::iter_inner::PartialDrop",
             ],
+        ),
+        (
+            "__ZN77_$LT$$RF$$u5b$syn..attr..Attribute$u5d$$u20$as$u20$syn..attr..FilterAttrs$GT$5outer17h1d80fb5ca49672feE",
+            vec!["syn::attr::Attribute", "syn::attr::FilterAttrs"],
         ),
     ];
 
