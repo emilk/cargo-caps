@@ -2,16 +2,20 @@ use clap::Parser;
 
 pub mod analyzer;
 pub mod build;
-pub mod info;
+pub mod caps;
+pub mod symbols;
 
 pub use analyzer::CapsAnalyzer;
 pub use build::BuildCommand;
-pub use info::InfoCommand;
+pub use caps::CapsCommand;
+pub use symbols::SymbolCommand;
 
 #[derive(Parser)]
 pub enum Commands {
     /// Analyze capabilities by running cargo build
     Build(BuildCommand),
-    /// Analyze capabilities of a specific rlib file
-    Info(InfoCommand),
+    /// Extract and analyze symbols from binaries
+    Symbols(SymbolCommand),
+    /// Extract and analyze capabilities from a single binary
+    Caps(CapsCommand),
 }

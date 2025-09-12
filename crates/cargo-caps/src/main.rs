@@ -13,7 +13,8 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Commands::Info(info_cmd) => info_cmd.execute(),
+        Commands::Symbols(symbols_cmd) => symbols_cmd.execute(),
         Commands::Build(build_cmd) => build_cmd.execute(),
+        Commands::Caps(caps_cmd) => caps_cmd.execute(),
     }
 }
