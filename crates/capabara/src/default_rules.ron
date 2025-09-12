@@ -35,6 +35,12 @@
         ],
     ),
     (
+        caps: [ ],
+        patterns: [
+            "core::*" // core has no capabilities
+        ],
+    ),
+    (
         caps: [
             Alloc,
         ],

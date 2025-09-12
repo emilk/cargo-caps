@@ -40,9 +40,29 @@ pub enum Capability {
     Any,
 }
 
+impl Capability {
+    pub fn emoji(&self) -> &'static str {
+        use Capability::{Alloc, Any, Fopen, Net, Panic, Stdio, Sysinfo, Thread, Time};
+        match self {
+            Panic => "💥",
+            Alloc => "🧠", 
+            Time => "⏰",
+            Sysinfo => "ℹ️",
+            Stdio => "📝",
+            Thread => "🧵",
+            Net => "🌐",
+            Fopen => "📁",
+            Any => "🚨",
+        }
+    }
+}
+
 pub struct DeducedCapablities {
-    /// The capabilities, and why we have them
-    pub caps: BTreeMap<Capability, Reasons>,
+    /// The known capabilities of this crate
+    pub own_caps: BTreeMap<Capability, Reasons>,
+
+    /// The crates we depend on that we know the capabilities of
+    pub known_crates: BTreeMap<String, BTreeSet<Capability>>,
 
     /// We couldn't classify these symbols
     pub unknown_symbols: BTreeSet<Symbol>,
@@ -51,13 +71,14 @@ pub struct DeducedCapablities {
     pub unknown_crates: BTreeMap<String, BTreeSet<Symbol>>,
 
     /// Rules for matching symbols to capabilities
-    rules: Rules,
+    rules: Rules, // TODO: move out somewhere else
 }
 
 impl Default for DeducedCapablities {
     fn default() -> Self {
         Self {
-            caps: Default::default(),
+            own_caps: Default::default(),
+            known_crates: Default::default(),
             unknown_symbols: Default::default(),
             unknown_crates: Default::default(),
             rules: default_rules(),
@@ -79,6 +100,32 @@ impl DeducedCapablities {
         slf
     }
 
+    pub fn total_capabilities(&self) -> BTreeSet<Capability> {
+        let Self {
+            own_caps,
+            known_crates,
+            unknown_symbols,
+            unknown_crates,
+            rules: _,
+        } = self;
+
+        let mut total = BTreeSet::default();
+
+        for cap in own_caps.keys() {
+            total.insert(*cap);
+        }
+        for caps in known_crates.values() {
+            for &cap in caps {
+                total.insert(cap);
+            }
+        }
+        if !unknown_symbols.is_empty() || !unknown_crates.is_empty() {
+            total.insert(Capability::Any);
+        }
+
+        total
+    }
+
     /// Capability from symbol
     fn add(&mut self, symbol: &Symbol) {
         for path in symbol.paths() {
@@ -89,7 +136,7 @@ impl DeducedCapablities {
                     // Check rules for the symbol
                     if let Some(capabilities) = self.rules.match_symbol(fun_name) {
                         for &capability in capabilities {
-                            self.caps
+                            self.own_caps
                                 .entry(capability)
                                 .or_default()
                                 .insert(symbol.clone());
@@ -104,7 +151,7 @@ impl DeducedCapablities {
                     // Check rules for the path
                     if let Some(capabilities) = self.rules.match_symbol(&path_str) {
                         for &capability in capabilities {
-                            self.caps
+                            self.own_caps
                                 .entry(capability)
                                 .or_default()
                                 .insert(symbol.clone());

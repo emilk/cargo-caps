@@ -59,17 +59,17 @@ fn print_capabilities(
     println!("Capability Analysis for: {}", binary_path.display());
     println!("═══════════════════════════════════════");
 
-    if capabilities.caps.is_empty() {
+    if capabilities.own_caps.is_empty() {
         println!("🔒 No specific capabilities detected");
     } else {
         println!("🔍 Detected Capabilities:");
         println!();
 
-        for (capability, reasons) in &capabilities.caps {
-            let icon = capability_icon(capability);
+        for (capability, reasons) in &capabilities.own_caps {
+            let icon = capability.emoji();
             println!("  {icon} {capability:?}");
 
-            if (verbose || capability == &Capability::Any) && !reasons.is_empty() {
+            if (verbose || *capability == Capability::Any) && !reasons.is_empty() {
                 println!("    Reasons ({} symbols):", reasons.len());
                 for symbol in reasons.iter().take(5) {
                     println!("      • {}", symbol.format(false));
@@ -117,7 +117,7 @@ fn print_capabilities(
     }
 
     // Summary
-    let total_capabilities = capabilities.caps.len();
+    let total_capabilities = capabilities.own_caps.len();
     let total_unknown_crates = capabilities.unknown_crates.len();
     let total_unknown_symbols = capabilities.unknown_symbols.len();
 
@@ -125,19 +125,4 @@ fn print_capabilities(
     println!("  • Capabilities detected: {total_capabilities}");
     println!("  • External crates: {total_unknown_crates}");
     println!("  • Unclassified symbols: {total_unknown_symbols}");
-}
-
-fn capability_icon(capability: &capabara::capability::Capability) -> &'static str {
-    use capabara::capability::Capability::{Panic, Alloc, Time, Sysinfo, Stdio, Thread, Net, Fopen, Any};
-    match capability {
-        Panic => "💥",
-        Alloc => "🧠",
-        Time => "⏰",
-        Sysinfo => "ℹ️",
-        Stdio => "📝",
-        Thread => "🧵",
-        Net => "🌐",
-        Fopen => "📁",
-        Any => "🚨",
-    }
 }
