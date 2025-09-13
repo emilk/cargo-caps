@@ -2,6 +2,7 @@ use clap::Parser;
 
 pub mod build;
 pub mod caps;
+mod graph_analysis;
 pub mod symbols;
 
 pub use build::BuildCommand;

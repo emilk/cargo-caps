@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::Context;
 use cargo_metadata::{DependencyKind, Message, MetadataCommand, Package, PackageId, TargetKind};
 use clap::Parser;
+use itertools::Itertools;
 
 use crate::analyzer::{CapsAnalyzer, CrateInfo, CrateKind};
 
@@ -87,33 +88,7 @@ impl BuildCommand {
     }
 
     fn analyze_dependencies(&self) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
-        let mut metadata_cmd = MetadataCommand::new();
-
-        // Apply same filters as the build command
-        if let Some(_package) = &self.package {
-            // For metadata, we need to specify the manifest path or current dir
-            // The package filter will be applied when analyzing
-        }
-
-        if !self.features.is_empty() {
-            metadata_cmd.features(cargo_metadata::CargoOpt::SomeFeatures(
-                self.features.clone(),
-            ));
-        }
-
-        if self.all_features {
-            metadata_cmd.features(cargo_metadata::CargoOpt::AllFeatures);
-        }
-
-        if self.no_default_features {
-            metadata_cmd.features(cargo_metadata::CargoOpt::NoDefaultFeatures);
-        }
-
-        let metadata = metadata_cmd.exec()?;
-
-        // Create a lookup map for packages by ID
-        let package_map: HashMap<&PackageId, &Package> =
-            metadata.packages.iter().map(|p| (&p.id, p)).collect();
+        let metadata = self.gather_cargo_metadata()?;
 
         // Get the package(s) we're interested in
         let target_packages = if let Some(package_name) = &self.package {
@@ -127,48 +102,77 @@ impl BuildCommand {
             metadata.workspace_packages()
         };
 
-        let mut crate_infos: HashMap<PackageId, CrateInfo> = HashMap::new();
+        if true {
+            let sources = target_packages.iter().map(|p| p.id.clone()).collect_vec();
+            super::graph_analysis::analyze_dependency_dag(&metadata, &sources)
+        } else {
+            let package_map: HashMap<&PackageId, &Package> =
+                metadata.packages.iter().map(|p| (&p.id, p)).collect();
 
-        for package in target_packages {
-            println!("Package: {}", package.name);
+            let mut crate_infos: HashMap<PackageId, CrateInfo> = HashMap::new();
 
-            crate_infos.entry(package.id.clone()).or_default(); // Remember all the top targets
+            for package in target_packages {
+                println!("Package: {}", package.name);
 
-            // Collect all transitive dependencies recursively
-            let mut visited = HashSet::new();
-            let mut all_deps = HashMap::new();
+                crate_infos.entry(package.id.clone()).or_default(); // Remember all the top targets
 
-            collect_transitive_deps(&package.id, &package_map, &mut visited, &mut all_deps);
+                // Collect all transitive dependencies recursively
+                let mut visited = HashSet::new();
+                let mut all_deps = HashMap::new();
 
-            #[expect(clippy::iter_over_hash_type)] // is ok: we sort the results
-            for (pkg_id, dep_kinds) in &all_deps {
-                if let Some(pkg) = package_map.get(pkg_id) {
-                    // Check if this is a proc-macro
-                    let is_proc_macro = pkg
-                        .targets
-                        .iter()
-                        .any(|t| t.kind.iter().any(|k| k == &TargetKind::ProcMacro));
+                collect_transitive_deps(&package.id, &package_map, &mut visited, &mut all_deps);
 
-                    let crate_info = crate_infos.entry(pkg.id.clone()).or_default();
+                #[expect(clippy::iter_over_hash_type)] // is ok: we sort the results
+                for (pkg_id, dep_kinds) in &all_deps {
+                    if let Some(pkg) = package_map.get(pkg_id) {
+                        // Check if this is a proc-macro
+                        let is_proc_macro = pkg
+                            .targets
+                            .iter()
+                            .any(|t| t.kind.iter().any(|k| k == &TargetKind::ProcMacro));
 
-                    if is_proc_macro {
-                        crate_info.kind.insert(CrateKind::ProcMacro);
-                    }
+                        let crate_info = crate_infos.entry(pkg.id.clone()).or_default();
 
-                    for dep_kind in dep_kinds {
-                        let crate_kind = match dep_kind {
-                            DependencyKind::Normal => CrateKind::Normal,
-                            DependencyKind::Development => CrateKind::Dev,
-                            DependencyKind::Build => CrateKind::Build,
-                            DependencyKind::Unknown => CrateKind::Unknown,
-                        };
-                        crate_info.kind.insert(crate_kind);
+                        if is_proc_macro {
+                            crate_info.kind.insert(CrateKind::ProcMacro);
+                        }
+
+                        for dep_kind in dep_kinds {
+                            let crate_kind = match dep_kind {
+                                DependencyKind::Normal => CrateKind::Normal,
+                                DependencyKind::Development => CrateKind::Dev,
+                                DependencyKind::Build => CrateKind::Build,
+                                DependencyKind::Unknown => CrateKind::Unknown,
+                            };
+                            crate_info.kind.insert(crate_kind);
+                        }
                     }
                 }
             }
-        }
 
-        Ok(crate_infos)
+            Ok(crate_infos)
+        }
+    }
+
+    fn gather_cargo_metadata(&self) -> Result<cargo_metadata::Metadata, anyhow::Error> {
+        let mut metadata_cmd = MetadataCommand::new();
+        if let Some(_package) = &self.package {
+            // For metadata, we need to specify the manifest path or current dir
+            // The package filter will be applied when analyzing
+        }
+        if !self.features.is_empty() {
+            metadata_cmd.features(cargo_metadata::CargoOpt::SomeFeatures(
+                self.features.clone(),
+            ));
+        }
+        if self.all_features {
+            metadata_cmd.features(cargo_metadata::CargoOpt::AllFeatures);
+        }
+        if self.no_default_features {
+            metadata_cmd.features(cargo_metadata::CargoOpt::NoDefaultFeatures);
+        }
+        let metadata = metadata_cmd.exec()?;
+        Ok(metadata)
     }
 
     fn make_cargo_command(&self) -> Command {
