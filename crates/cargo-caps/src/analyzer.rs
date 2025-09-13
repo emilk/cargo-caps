@@ -1,11 +1,25 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     path::{Path, PathBuf},
 };
 
 use capabara::capability::{Capability, CapabilitySet, DeducedCapablities};
 use cargo_metadata::{Artifact, camino::Utf8PathBuf};
 use itertools::Itertools as _;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum CrateKind {
+    Unknown,
+    Normal,
+    Build,
+    Dev,
+    ProcMacro,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct CrateInfo {
+    pub kind: BTreeSet<CrateKind>,
+}
 
 pub struct CapsAnalyzer {
     lib_caps: HashMap<String, DeducedCapablities>,

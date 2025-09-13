@@ -140,15 +140,21 @@
             "std::collections::*",
             "std::ffi::os_str::*",
             "std::hash::*",
+            "std::os::unix::ffi::os_str::*",
             "std::panic::*",
             "std::panicking::*",
+            "std::path::Components",
+            "std::path::Path::components",
             "std::path::Path::extension::*",
+            "std::path::Path::is_absolute",
             "std::path::PathBuf", // NOT ::*, but just `<std::path::PathBuf as core::clone::Clone>::clone` is OK
             "std::process::abort*", // TODO: consider adding special capability for abort/exit
             "std::process::exit*", // TODO: consider adding special capability for abort/exit
             "std::sync::*",
             "std::sys::os_str::*",
             "std::sys::pal::unix::abort_internal*",
+            "std::sys::pal::unix::decode_error_kind",
+            "std::sys::pal::unix::decode_error_kind",
             "std::sys::pal::unix::sync::*",
             "std::sys::process::unix::common::cstring_array::*",
             "std::sys::random::*", // TODO: consider adding special capability for random

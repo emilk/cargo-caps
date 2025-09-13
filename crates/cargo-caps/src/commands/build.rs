@@ -3,10 +3,12 @@ use std::{
     process::{Command, Stdio},
 };
 
-use cargo_metadata::{Message, TargetKind};
+use std::collections::{HashMap, HashSet};
+
+use cargo_metadata::{DependencyKind, Message, MetadataCommand, Package, PackageId, TargetKind};
 use clap::Parser;
 
-use crate::analyzer::CapsAnalyzer;
+use crate::analyzer::{CapsAnalyzer, CrateInfo, CrateKind};
 
 #[derive(Parser)]
 /// Analyze capabilities by running cargo build
@@ -33,7 +35,7 @@ pub struct BuildCommand {
     pub quiet: bool,
 
     /// Capabilities to ignore when displaying results (comma-separated, lowercase)
-    #[arg(long = "ignored-caps", default_value = "alloc,panic")]
+    #[arg(long = "ignored-caps", default_value = "alloc,time,panic")]
     pub ignored_caps: String,
 
     /// Show crates with no capabilities after filtering
@@ -43,6 +45,9 @@ pub struct BuildCommand {
 
 impl BuildCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
+        // Analyze dependencies before building
+        let crate_infos = self.analyze_dependencies()?;
+
         // Inform user about ignored capabilities if any are specified
         if !self.ignored_caps.is_empty() {
             println!("ignored-caps: {}", self.ignored_caps);
@@ -64,7 +69,16 @@ impl BuildCommand {
                 && let Message::CompilerArtifact(artifact) = message
             {
                 // Filter for library artifacts
+                // TODO: why just Lib?
                 if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
+                    let name = &artifact.target.name;
+                    let crate_info = crate_infos.get(name);
+                    if let Some(crate_info) = crate_info {
+                        // eprintln!("{name}: {crate_info:?}");
+                    } else {
+                        eprintln!("ERROR: unknown crate {name:?}");
+                    }
+
                     for file_path in &artifact.filenames {
                         if file_path.as_str().ends_with(".rlib") {
                             analyzer.add_lib_or_bin(&artifact, file_path, self.verbose);
@@ -82,6 +96,99 @@ impl BuildCommand {
         );
 
         Ok(())
+    }
+
+    fn analyze_dependencies(&self) -> anyhow::Result<HashMap<String, CrateInfo>> {
+        let mut metadata_cmd = MetadataCommand::new();
+
+        // Apply same filters as the build command
+        if let Some(_package) = &self.package {
+            // For metadata, we need to specify the manifest path or current dir
+            // The package filter will be applied when analyzing
+        }
+
+        if !self.features.is_empty() {
+            metadata_cmd.features(cargo_metadata::CargoOpt::SomeFeatures(
+                self.features.clone(),
+            ));
+        }
+
+        if self.all_features {
+            metadata_cmd.features(cargo_metadata::CargoOpt::AllFeatures);
+        }
+
+        if self.no_default_features {
+            metadata_cmd.features(cargo_metadata::CargoOpt::NoDefaultFeatures);
+        }
+
+        let metadata = metadata_cmd.exec()?;
+
+        // Create a lookup map for packages by ID
+        let package_map: HashMap<&PackageId, &Package> =
+            metadata.packages.iter().map(|p| (&p.id, p)).collect();
+
+        println!("Dependency analysis:");
+
+        // Get the package(s) we're interested in
+        let target_packages = if let Some(package_name) = &self.package {
+            metadata
+                .packages
+                .iter()
+                .filter(|p| p.name.as_str() == package_name)
+                .collect()
+        } else {
+            // If no specific package, analyze workspace members
+            metadata.workspace_packages()
+        };
+
+        let mut crate_infos: HashMap<String, CrateInfo> = HashMap::new();
+
+        for package in target_packages {
+            println!("Package: {}", package.name);
+
+            // Collect all transitive dependencies recursively
+            let mut visited = HashSet::new();
+            let mut all_deps = HashMap::new();
+
+            collect_transitive_deps(
+                &package.id,
+                &package_map,
+                &mut visited,
+                &mut all_deps,
+                0, // depth for root package
+            );
+
+            #[expect(clippy::iter_over_hash_type)] // is ok: we sort the results
+            for (pkg_id, dep_kinds) in &all_deps {
+                if let Some(pkg) = package_map.get(pkg_id) {
+                    let pkg_name = pkg.name.as_str();
+
+                    // Check if this is a proc-macro
+                    let is_proc_macro = pkg
+                        .targets
+                        .iter()
+                        .any(|t| t.kind.iter().any(|k| k == &TargetKind::ProcMacro));
+
+                    let crate_info = crate_infos.entry(pkg_name.to_owned()).or_default();
+
+                    if is_proc_macro {
+                        crate_info.kind.insert(CrateKind::ProcMacro);
+                    }
+
+                    for dep_kind in dep_kinds {
+                        let crate_kind = match dep_kind {
+                            DependencyKind::Normal => CrateKind::Normal,
+                            DependencyKind::Development => CrateKind::Dev,
+                            DependencyKind::Build => CrateKind::Build,
+                            DependencyKind::Unknown => CrateKind::Unknown,
+                        };
+                        crate_info.kind.insert(crate_kind);
+                    }
+                }
+            }
+        }
+
+        Ok(crate_infos)
     }
 
     fn make_cargo_command(&self) -> Command {
@@ -110,5 +217,51 @@ impl BuildCommand {
             cmd.arg("--release");
         }
         cmd
+    }
+}
+
+fn collect_transitive_deps(
+    package_id: &PackageId,
+    package_map: &HashMap<&PackageId, &Package>,
+    visited: &mut HashSet<PackageId>,
+    all_deps: &mut HashMap<PackageId, HashSet<DependencyKind>>,
+    depth: usize,
+) {
+    // Avoid infinite recursion
+    if visited.contains(package_id) {
+        return;
+    }
+    visited.insert(package_id.clone());
+
+    if let Some(package) = package_map.get(package_id) {
+        for dep in &package.dependencies {
+            // Find the actual package for this dependency
+            if let Some(dep_package) = package_map
+                .values()
+                .find(|p| p.name.as_str() == dep.name.as_str())
+            {
+                // Record this dependency with its kind
+                all_deps
+                    .entry(dep_package.id.clone())
+                    .or_default()
+                    .insert(dep.kind);
+
+                // Recursively collect dependencies of this dependency
+                // but only for normal and build deps to avoid dev dep explosion
+                // /if matches!(dep.kind, DependencyKind::Normal | DependencyKind::Build) || depth == 0
+                {
+                    collect_transitive_deps(
+                        &dep_package.id,
+                        package_map,
+                        visited,
+                        all_deps,
+                        depth + 1,
+                    );
+                }
+            } else {
+                // I think we get here for dependencies that are disabled for this feature set
+                // eprintln!("ERROR: failed to find packge {:?}", dep.name);
+            }
+        }
     }
 }
