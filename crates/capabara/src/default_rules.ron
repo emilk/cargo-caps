@@ -10,15 +10,18 @@
             // NOTE: cargo-caps ignored leading underscores
 
             // Simple memory stuff:
+            ".memset_pattern.*",
             "bzero",
             "memcmp",
             "memcpy",
             "memmove",
-            "memset",
             "memset_pattern*",
-            ".memset_pattern.llvm*",
+            "memset",
+            "strcmp",
+            "strcpy",
+            "strlen",
 
-            "error",
+            "std::sys::pal::unix::os::errno",
             "error",
 
             // Math:

@@ -5,6 +5,7 @@ use std::{
 
 use std::collections::{HashMap, HashSet};
 
+use anyhow::Context;
 use cargo_metadata::{DependencyKind, Message, MetadataCommand, Package, PackageId, TargetKind};
 use clap::Parser;
 
@@ -56,6 +57,8 @@ impl BuildCommand {
 
         let mut cmd = self.make_cargo_command();
 
+        let verbose = self.verbose;
+
         let mut child = cmd.stdout(Stdio::piped()).spawn()?;
 
         let stdout = child.stdout.take().unwrap();
@@ -68,26 +71,8 @@ impl BuildCommand {
             if let Ok(message) = serde_json::from_str::<Message>(&line)
                 && let Message::CompilerArtifact(artifact) = message
             {
-                // Filter for library artifacts
-                // TODO: why just Lib?
-                if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
-                    let name = &artifact.target.name;
-                    let crate_info = crate_infos.get(&artifact.package_id);
-                    if let Some(crate_info) = crate_info {
-                        for file_path in &artifact.filenames {
-                            if file_path.as_str().ends_with(".rlib") {
-                                analyzer.add_lib_or_bin(
-                                    &artifact,
-                                    crate_info,
-                                    file_path,
-                                    self.verbose,
-                                )?;
-                            }
-                        }
-                    } else {
-                        anyhow::bail!("ERROR: unknown crate {name:?}");
-                    }
-                }
+                analyze_artifact(&mut analyzer, &crate_infos, verbose, &artifact)
+                    .with_context(|| format!("Name: {}", artifact.target.name))?;
             }
         }
 
@@ -129,8 +114,6 @@ impl BuildCommand {
         // Create a lookup map for packages by ID
         let package_map: HashMap<&PackageId, &Package> =
             metadata.packages.iter().map(|p| (&p.id, p)).collect();
-
-        println!("Dependency analysis:");
 
         // Get the package(s) we're interested in
         let target_packages = if let Some(package_name) = &self.package {
@@ -217,6 +200,32 @@ impl BuildCommand {
     }
 }
 
+fn analyze_artifact(
+    analyzer: &mut CapsAnalyzer,
+    crate_infos: &HashMap<PackageId, CrateInfo>,
+    verbose: bool,
+    artifact: &cargo_metadata::Artifact,
+) -> Result<(), anyhow::Error> {
+    // TODO: all TargetKind?
+    if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
+        let name = &artifact.target.name;
+        let crate_info = crate_infos.get(&artifact.package_id);
+        if let Some(crate_info) = crate_info {
+            for file_path in &artifact.filenames {
+                if file_path.as_str().ends_with(".rlib") {
+                    analyzer.add_lib_or_bin(artifact, crate_info, file_path, verbose)?;
+                }
+            }
+        } else {
+            // Not sure why we sometimes end up here.
+            // Examples: bitflags block2 objc2 objc2_app_kit
+            // anyhow::bail!("ERROR: unknown crate {name:?}");
+            eprintln!("ERROR: unknown crate {name:?}"); // TODO: continue, then exit with error
+        }
+    }
+    Ok(())
+}
+
 fn collect_transitive_deps(
     package_id: &PackageId,
     package_map: &HashMap<&PackageId, &Package>,
@@ -244,9 +253,7 @@ fn collect_transitive_deps(
 
                 // TODO: if this is ONLY a build dependency, we should mark everything below as ONLY build dependency.
                 // We probably need pet-graph for this.
-                {
-                    collect_transitive_deps(&dep_package.id, package_map, visited, all_deps);
-                }
+                collect_transitive_deps(&dep_package.id, package_map, visited, all_deps);
             } else {
                 // I think we get here for dependencies that are disabled for this feature set
                 // eprintln!("ERROR: failed to find packge {:?}", dep.name);

@@ -7,7 +7,10 @@ use capabara::{
     CrateName,
     capability::{Capability, CapabilitySet, DeducedCapablities},
 };
-use cargo_metadata::{Artifact, camino::Utf8PathBuf};
+use cargo_metadata::{
+    Artifact,
+    camino::{Utf8Path, Utf8PathBuf},
+};
 use itertools::Itertools as _;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -49,7 +52,6 @@ impl CapsAnalyzer {
     ) -> anyhow::Result<()> {
         let target = &artifact.target;
         let crate_name = CrateName::new(&target.name)?;
-        let features = &artifact.features;
         let path = PathBuf::from(bin_path.as_str());
 
         // Analyze capabilities for this rlib
@@ -158,17 +160,31 @@ impl CapsAnalyzer {
 
         println!("{crate_name}: {info}");
         if verbose {
-            println!("  path: {}", bin_path.as_str());
+            println!("  path: {}", as_relative_path(bin_path));
+
+            let features = &artifact.features;
             if features.is_empty() {
                 println!("  features: (default)");
             } else {
                 println!("  features: {}", features.join(", "));
             }
+
             println!("Kind: {:?}", crate_info.kind);
+
             println!();
         }
 
         Ok(())
+    }
+}
+
+fn as_relative_path(path: &Utf8Path) -> &Utf8Path {
+    if let Ok(cwd) = std::env::current_dir()
+        && let Ok(relative) = path.strip_prefix(cwd)
+    {
+        relative
+    } else {
+        path
     }
 }
 
