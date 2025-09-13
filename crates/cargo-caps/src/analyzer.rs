@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use capabara::capability::{Capability, CapabilitySet, DeducedCapablities};
+use capabara::{
+    CrateName,
+    capability::{Capability, CapabilitySet, DeducedCapablities},
+};
 use cargo_metadata::{Artifact, camino::Utf8PathBuf};
 use itertools::Itertools as _;
 
@@ -22,7 +25,7 @@ pub struct CrateInfo {
 }
 
 pub struct CapsAnalyzer {
-    lib_caps: HashMap<String, DeducedCapablities>,
+    lib_caps: HashMap<CrateName, DeducedCapablities>,
     ignored_caps: CapabilitySet,
     show_empty: bool,
 }
@@ -37,19 +40,22 @@ impl CapsAnalyzer {
         }
     }
 
-    pub fn add_lib_or_bin(&mut self, artifact: &Artifact, bin_path: &Utf8PathBuf, verbose: bool) {
+    pub fn add_lib_or_bin(
+        &mut self,
+        artifact: &Artifact,
+        crate_info: &CrateInfo,
+        bin_path: &Utf8PathBuf,
+        verbose: bool,
+    ) -> anyhow::Result<()> {
         let target = &artifact.target;
-        let crate_name = &target.name;
+        let crate_name = CrateName::new(&target.name)?;
         let features = &artifact.features;
         let path = PathBuf::from(bin_path.as_str());
 
         // Analyze capabilities for this rlib
-        let Some(mut deduced_caps) = deduce_caps_of_binary(&path) else {
-            eprintln!("ERROR: failed to decude capabilities of {bin_path:?}"); // TODO: report error
-            return;
-        };
+        let mut deduced_caps = deduce_caps_of_binary(&path)?;
 
-        deduced_caps.unknown_crates.remove(crate_name); // we know ourselves
+        deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
 
         for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
             if let Some(dep_caps) = self.lib_caps.get(&dep_crate_name) {
@@ -67,7 +73,7 @@ impl CapsAnalyzer {
 
         // Remember capabilities:
         self.lib_caps
-            .insert(crate_name.to_owned(), deduced_caps.clone());
+            .insert(crate_name.clone(), deduced_caps.clone());
 
         let info = if !deduced_caps.unknown_symbols.is_empty() {
             let symbol_names: Vec<String> = deduced_caps
@@ -99,7 +105,7 @@ impl CapsAnalyzer {
                 if self.show_empty {
                     "😌 none".to_owned()
                 } else {
-                    return;
+                    return Ok(()); // TODO: respect verbose? maybe?
                 }
             } else {
                 let cap_names: String = crate_deps
@@ -132,9 +138,7 @@ impl CapsAnalyzer {
 
             // Check if we should skip this crate (no capabilities after filtering)
             if filtered_caps.is_empty() && !self.show_empty {
-                // Store the capabilities but don't display
-                self.lib_caps.insert(crate_name.to_owned(), deduced_caps);
-                return;
+                return Ok(()); // TODO: respect verbose? maybe?
             }
 
             // Print short description using filtered capabilities
@@ -160,12 +164,11 @@ impl CapsAnalyzer {
             } else {
                 println!("  features: {}", features.join(", "));
             }
-            // println!(
-            //     "  kind: {:?}, crate_types: {:?}",
-            //     &target.kind, &target.crate_types
-            // );
+            println!("Kind: {:?}", crate_info.kind);
             println!();
         }
+
+        Ok(())
     }
 }
 
@@ -223,8 +226,8 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
         .collect()
 }
 
-fn deduce_caps_of_binary(path: &Path) -> Option<DeducedCapablities> {
-    let symbols = capabara::extract_symbols(path).ok()?;
+fn deduce_caps_of_binary(path: &Path) -> anyhow::Result<DeducedCapablities> {
+    let symbols = capabara::extract_symbols(path)?;
     let filtered_symbols = capabara::filter_symbols(symbols, false, false);
-    Some(DeducedCapablities::from_symbols(filtered_symbols))
+    DeducedCapablities::from_symbols(filtered_symbols)
 }

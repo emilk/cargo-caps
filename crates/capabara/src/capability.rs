@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Symbol,
+    CrateName, Symbol,
     cap_rule::{Rules, default_rules},
     symbol::FunctionOrPath,
 };
@@ -65,13 +65,13 @@ pub struct DeducedCapablities {
     pub own_caps: BTreeMap<Capability, Reasons>,
 
     /// The crates we depend on that we know the capabilities of
-    pub known_crates: BTreeMap<String, CapabilitySet>,
+    pub known_crates: BTreeMap<CrateName, CapabilitySet>,
 
     /// We couldn't classify these symbols
     pub unknown_symbols: BTreeSet<Symbol>,
 
     /// We need to resolve these crates to see what their capabilities are
-    pub unknown_crates: BTreeMap<String, BTreeSet<Symbol>>,
+    pub unknown_crates: BTreeMap<CrateName, BTreeSet<Symbol>>,
 
     /// Rules for matching symbols to capabilities
     rules: Rules, // TODO: move out somewhere else
@@ -95,12 +95,12 @@ pub type Reasons = BTreeSet<Reason>;
 pub type Reason = Symbol;
 
 impl DeducedCapablities {
-    pub fn from_symbols(symbols: impl IntoIterator<Item = Symbol>) -> Self {
+    pub fn from_symbols(symbols: impl IntoIterator<Item = Symbol>) -> anyhow::Result<Self> {
         let mut slf = Self::default();
         for symbol in symbols {
-            slf.add(&symbol);
+            slf.add(&symbol)?;
         }
-        slf
+        Ok(slf)
     }
 
     pub fn total_capabilities(&self) -> CapabilitySet {
@@ -130,7 +130,7 @@ impl DeducedCapablities {
     }
 
     /// Capability from symbol
-    fn add(&mut self, symbol: &Symbol) {
+    fn add(&mut self, symbol: &Symbol) -> anyhow::Result<()> {
         for path in symbol.paths() {
             match path {
                 FunctionOrPath::Function(fun_name) => {
@@ -172,12 +172,14 @@ impl DeducedCapablities {
                             "Weird crate name: {crate_name:?} in symbol {symbol:?}"
                         );
                         self.unknown_crates
-                            .entry(crate_name.to_owned())
+                            .entry(CrateName::new(crate_name)?)
                             .or_default()
                             .insert(symbol.clone());
                     }
                 }
             }
         }
+
+        Ok(())
     }
 }

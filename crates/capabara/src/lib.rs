@@ -10,18 +10,21 @@ use object::{
     SymbolScope as ObjectSymbolScope,
 };
 
-pub use capability::{CapabilitySet, Capability};
+pub use capability::{Capability, CapabilitySet};
 
 use crate::symbol::{Symbol, SymbolKind, SymbolScope};
 
 // TODO: less pub here
 pub mod cap_rule;
 pub mod capability;
+mod crate_name;
 pub mod demangle;
 pub mod print;
 pub mod rust_path;
 pub mod symbol;
 pub mod tree;
+
+pub use crate_name::CrateName;
 
 /// Extact symbols from an executable or an .rlib.
 pub fn extract_symbols(binary_path: &Path) -> Result<Vec<Symbol>> {

@@ -18,6 +18,9 @@
             "memset_pattern*",
             ".memset_pattern.llvm*",
 
+            "error",
+            "error",
+
             // Math:
             "acos",
             "acosf",

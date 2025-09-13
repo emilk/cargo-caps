@@ -72,17 +72,20 @@ impl BuildCommand {
                 // TODO: why just Lib?
                 if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
                     let name = &artifact.target.name;
-                    let crate_info = crate_infos.get(name);
+                    let crate_info = crate_infos.get(&artifact.package_id);
                     if let Some(crate_info) = crate_info {
-                        // eprintln!("{name}: {crate_info:?}");
-                    } else {
-                        eprintln!("ERROR: unknown crate {name:?}");
-                    }
-
-                    for file_path in &artifact.filenames {
-                        if file_path.as_str().ends_with(".rlib") {
-                            analyzer.add_lib_or_bin(&artifact, file_path, self.verbose);
+                        for file_path in &artifact.filenames {
+                            if file_path.as_str().ends_with(".rlib") {
+                                analyzer.add_lib_or_bin(
+                                    &artifact,
+                                    crate_info,
+                                    file_path,
+                                    self.verbose,
+                                )?;
+                            }
                         }
+                    } else {
+                        anyhow::bail!("ERROR: unknown crate {name:?}");
                     }
                 }
             }
@@ -98,7 +101,7 @@ impl BuildCommand {
         Ok(())
     }
 
-    fn analyze_dependencies(&self) -> anyhow::Result<HashMap<String, CrateInfo>> {
+    fn analyze_dependencies(&self) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
         let mut metadata_cmd = MetadataCommand::new();
 
         // Apply same filters as the build command
@@ -141,35 +144,29 @@ impl BuildCommand {
             metadata.workspace_packages()
         };
 
-        let mut crate_infos: HashMap<String, CrateInfo> = HashMap::new();
+        let mut crate_infos: HashMap<PackageId, CrateInfo> = HashMap::new();
 
         for package in target_packages {
             println!("Package: {}", package.name);
+
+            crate_infos.entry(package.id.clone()).or_default(); // Remember all the top targets
 
             // Collect all transitive dependencies recursively
             let mut visited = HashSet::new();
             let mut all_deps = HashMap::new();
 
-            collect_transitive_deps(
-                &package.id,
-                &package_map,
-                &mut visited,
-                &mut all_deps,
-                0, // depth for root package
-            );
+            collect_transitive_deps(&package.id, &package_map, &mut visited, &mut all_deps);
 
             #[expect(clippy::iter_over_hash_type)] // is ok: we sort the results
             for (pkg_id, dep_kinds) in &all_deps {
                 if let Some(pkg) = package_map.get(pkg_id) {
-                    let pkg_name = pkg.name.as_str();
-
                     // Check if this is a proc-macro
                     let is_proc_macro = pkg
                         .targets
                         .iter()
                         .any(|t| t.kind.iter().any(|k| k == &TargetKind::ProcMacro));
 
-                    let crate_info = crate_infos.entry(pkg_name.to_owned()).or_default();
+                    let crate_info = crate_infos.entry(pkg.id.clone()).or_default();
 
                     if is_proc_macro {
                         crate_info.kind.insert(CrateKind::ProcMacro);
@@ -225,7 +222,6 @@ fn collect_transitive_deps(
     package_map: &HashMap<&PackageId, &Package>,
     visited: &mut HashSet<PackageId>,
     all_deps: &mut HashMap<PackageId, HashSet<DependencyKind>>,
-    depth: usize,
 ) {
     // Avoid infinite recursion
     if visited.contains(package_id) {
@@ -246,17 +242,10 @@ fn collect_transitive_deps(
                     .or_default()
                     .insert(dep.kind);
 
-                // Recursively collect dependencies of this dependency
-                // but only for normal and build deps to avoid dev dep explosion
-                // /if matches!(dep.kind, DependencyKind::Normal | DependencyKind::Build) || depth == 0
+                // TODO: if this is ONLY a build dependency, we should mark everything below as ONLY build dependency.
+                // We probably need pet-graph for this.
                 {
-                    collect_transitive_deps(
-                        &dep_package.id,
-                        package_map,
-                        visited,
-                        all_deps,
-                        depth + 1,
-                    );
+                    collect_transitive_deps(&dep_package.id, package_map, visited, all_deps);
                 }
             } else {
                 // I think we get here for dependencies that are disabled for this feature set

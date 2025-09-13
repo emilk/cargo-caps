@@ -34,7 +34,7 @@ impl CapsCommand {
             capabara::filter_symbols(symbols, self.include_local, self.include_all_kinds);
 
         // Analyze capabilities
-        let capabilities = DeducedCapablities::from_symbols(filtered_symbols);
+        let capabilities = DeducedCapablities::from_symbols(filtered_symbols)?;
 
         // Print results
         self.print_capabilities(&capabilities);
