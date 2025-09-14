@@ -7,13 +7,18 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-capabara = { path = "../capabara" }
-
 anyhow.workspace = true
+ar.workspace = true
 cargo_metadata.workspace = true
 clap.workspace = true
+cpp_demangle.workspace = true
 itertools.workspace = true
+log-once.workspace = true
+object.workspace = true
 petgraph.workspace = true
+ron.workspace = true
+rustc-demangle.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [[bin]]

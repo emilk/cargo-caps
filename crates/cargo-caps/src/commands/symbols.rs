@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use capabara::print::PrintOptions;
+use crate::print::PrintOptions;
 
 #[derive(Parser)]
 /// Extract and analyze symbols from binaries
@@ -61,9 +61,9 @@ impl SymbolCommand {
                 println!("\n{}", "=".repeat(80));
             }
             
-            let symbols = capabara::extract_symbols(binary_path)?;
+            let symbols = crate::extract_symbols(binary_path)?;
             let original_count = symbols.len();
-            let filtered_symbols = capabara::filter_symbols(symbols, self.include_local, self.include_all_kinds);
+            let filtered_symbols = crate::filter_symbols(symbols, self.include_local, self.include_all_kinds);
             
             if self.show_metadata && filtered_symbols.len() < original_count {
                 eprintln!(
@@ -72,7 +72,7 @@ impl SymbolCommand {
                 );
             }
 
-            capabara::print::print_symbols(binary_path, &filtered_symbols, &options)?;
+            crate::print::print_symbols(binary_path, &filtered_symbols, &options)?;
         }
         Ok(())
     }

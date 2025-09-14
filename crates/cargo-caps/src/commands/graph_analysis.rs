@@ -1,9 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use cargo_metadata::{DependencyKind, Metadata, PackageId};
-use petgraph::graph::NodeIndex;
-use petgraph::visit::EdgeRef as _;
-use petgraph::{Directed, Graph, algo::is_cyclic_directed};
+use petgraph::{Directed, Graph, graph::NodeIndex, visit::EdgeRef as _};
 
 use crate::analyzer::{CrateInfo, CrateKind};
 
@@ -144,12 +142,12 @@ pub fn analyze_dependency_dag(
         let node_kind = dag.graph[node_idx].kind.clone();
 
         // Collect edge information to avoid borrow checker issues
-        let edges: Vec<(NodeIndex, Edge)> = dag
+        let node_edges: Vec<(NodeIndex, Edge)> = dag
             .graph
             .edges(node_idx)
             .map(|edge| (edge.target(), edge.weight().clone()))
             .collect();
-        for (dependency_idx, edge_data) in edges {
+        for (dependency_idx, edge_data) in node_edges {
             // Calculate the new kinds for the dependency
             let new_kinds = depenency_kind_from_edge_and_dependent(
                 &edge_data,

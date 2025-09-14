@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use capabara::capability::{Capability, DeducedCapablities};
+use crate::capability::{Capability, DeducedCapablities};
 
 #[derive(Parser)]
 /// Extract symbols from binaries and analyze their capabilities
@@ -29,9 +29,9 @@ impl CapsCommand {
         }
 
         // Extract symbols from the binary
-        let symbols = capabara::extract_symbols(&self.binary_path)?;
+        let symbols = crate::extract_symbols(&self.binary_path)?;
         let filtered_symbols =
-            capabara::filter_symbols(symbols, self.include_local, self.include_all_kinds);
+            crate::filter_symbols(symbols, self.include_local, self.include_all_kinds);
 
         // Analyze capabilities
         let capabilities = DeducedCapablities::from_symbols(filtered_symbols)?;

@@ -1,14 +1,13 @@
 use std::{
+    collections::{HashMap, HashSet},
     io::{BufRead as _, BufReader},
     process::{Command, Stdio},
 };
 
-use std::collections::{HashMap, HashSet};
-
-use anyhow::Context;
+use anyhow::Context as _;
 use cargo_metadata::{DependencyKind, Message, MetadataCommand, Package, PackageId, TargetKind};
 use clap::Parser;
-use itertools::Itertools;
+use itertools::Itertools as _;
 
 use crate::analyzer::{CapsAnalyzer, CrateInfo, CrateKind};
 

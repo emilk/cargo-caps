@@ -2,8 +2,10 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::symbol::Symbol;
-use crate::tree::{Tree, filter_tree_by_path, tree_from_symbols};
+use crate::{
+    symbol::Symbol,
+    tree::{Tree, filter_tree_by_path, tree_from_symbols},
+};
 
 pub struct PrintOptions {
     pub depth: u32,
@@ -11,7 +13,6 @@ pub struct PrintOptions {
     pub include_mangled: bool,
     pub show_metadata: bool,
 }
-
 
 /// Print a tree structure with proper indentation and tree characters
 fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions) {
@@ -61,12 +62,7 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions)
     }
 }
 
-
-pub fn print_symbols(
-    binary_path: &Path,
-    symbols: &[Symbol],
-    options: &PrintOptions,
-) -> Result<()> {
+pub fn print_symbols(binary_path: &Path, symbols: &[Symbol], options: &PrintOptions) -> Result<()> {
     let depth = options.depth;
 
     if depth == 0 {
@@ -103,4 +99,3 @@ pub fn print_symbols(
 
     Ok(())
 }
-

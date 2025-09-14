@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use capabara::{
+use crate::{
     CrateName,
     capability::{Capability, CapabilitySet, DeducedCapablities},
 };
@@ -92,7 +92,7 @@ impl CapsAnalyzer {
 
             format!(
                 "{}Any because of unknown symbols: {symbol_text}",
-                capabara::capability::Capability::Any.emoji()
+                Capability::Any.emoji()
             )
         } else if deduced_caps.own_caps.is_empty() {
             let all_crate_deps: CapabilitySet = deduced_caps
@@ -120,7 +120,7 @@ impl CapsAnalyzer {
             // Why do we think this crate needs the `Any` capability?
             let mut info = format!(
                 "{}Any because of",
-                capabara::capability::Capability::Any.emoji()
+                Capability::Any.emoji()
             );
             // TODO: pick a few reasons at random instead of the first N
             let max_width = 80;
@@ -146,9 +146,9 @@ impl CapsAnalyzer {
             // Print short description using filtered capabilities
             if filtered_caps.is_empty() {
                 "😌 none".to_owned()
-            } else if filtered_caps.contains(&capabara::capability::Capability::Any) {
+            } else if filtered_caps.contains(&Capability::Any) {
                 // If "Any" is present, show only that
-                format!("{}Any", capabara::capability::Capability::Any.emoji())
+                format!("{}Any", Capability::Any.emoji())
             } else {
                 let cap_names: Vec<String> = filtered_caps
                     .iter()
@@ -243,7 +243,7 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
 }
 
 fn deduce_caps_of_binary(path: &Path) -> anyhow::Result<DeducedCapablities> {
-    let symbols = capabara::extract_symbols(path)?;
-    let filtered_symbols = capabara::filter_symbols(symbols, false, false);
+    let symbols = crate::extract_symbols(path)?;
+    let filtered_symbols = crate::filter_symbols(symbols, false, false);
     DeducedCapablities::from_symbols(filtered_symbols)
 }

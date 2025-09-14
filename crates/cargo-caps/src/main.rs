@@ -1,5 +1,5 @@
-use clap::Parser;
 use cargo_caps::Commands;
+use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "cargo-caps")]
