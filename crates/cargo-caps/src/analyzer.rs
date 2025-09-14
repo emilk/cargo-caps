@@ -22,6 +22,18 @@ pub enum CrateKind {
     ProcMacro,
 }
 
+impl std::fmt::Display for CrateKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown => write!(f, "⚠️ unknown dependency type"),
+            Self::Normal => write!(f, "normal dependency"),
+            Self::Build => write!(f, "build-dependency"),
+            Self::Dev => write!(f, "dev-dependency"),
+            Self::ProcMacro => write!(f, "proc-macro"),
+        }
+    }
+}
+
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct CrateInfo {
     pub kind: BTreeSet<CrateKind>,
@@ -34,8 +46,7 @@ pub struct CapsAnalyzer {
 }
 
 impl CapsAnalyzer {
-    pub fn new(ignored_caps_str: &str, show_empty: bool) -> Self {
-        let ignored_caps = parse_ignored_caps(ignored_caps_str);
+    pub fn new(ignored_caps: CapabilitySet, show_empty: bool) -> Self {
         Self {
             lib_caps: HashMap::new(),
             ignored_caps,
@@ -77,6 +88,14 @@ impl CapsAnalyzer {
         self.lib_caps
             .insert(crate_name.clone(), deduced_caps.clone());
 
+        let crate_kind_suffix = {
+            if crate_info.kind.contains(&CrateKind::Normal) {
+                String::new() // Not worth mentioning
+            } else {
+                format!(" ({})", crate_info.kind.iter().join(", "))
+            }
+        };
+
         let info = if !deduced_caps.unknown_symbols.is_empty() {
             let symbol_names: Vec<String> = deduced_caps
                 .unknown_symbols
@@ -91,8 +110,9 @@ impl CapsAnalyzer {
             };
 
             format!(
-                "{}Any because of unknown symbols: {symbol_text}",
-                Capability::Any.emoji()
+                "{}Any because of {} unknown symbol(s): {symbol_text}",
+                Capability::Any.emoji(),
+                deduced_caps.unknown_symbols.len(),
             )
         } else if deduced_caps.own_caps.is_empty() {
             let all_crate_deps: CapabilitySet = deduced_caps
@@ -119,8 +139,8 @@ impl CapsAnalyzer {
         } else if let Some(reasons) = deduced_caps.own_caps.get(&Capability::Any) {
             // Why do we think this crate needs the `Any` capability?
             let mut info = format!("{}Any because of", Capability::Any.emoji());
-            // TODO: pick a few reasons at random instead of the first N
-            let max_width = 80;
+            // TODO: pick a random reasons instead of the first N
+            let max_width = 60;
             for symbol in reasons {
                 if info.len() < max_width {
                     info += &format!(" {}", symbol.format(false));
@@ -155,7 +175,7 @@ impl CapsAnalyzer {
             }
         };
 
-        println!("{crate_name}: {info}");
+        println!("{crate_name}{crate_kind_suffix}: {info}");
         if verbose {
             println!("  path: {}", as_relative_path(bin_path));
 
@@ -166,7 +186,7 @@ impl CapsAnalyzer {
                 println!("  features: {}", features.join(", "));
             }
 
-            println!("Kind: {:?}", crate_info.kind);
+            println!("Kind: {}", crate_info.kind.iter().join(", "));
 
             println!();
         }
@@ -182,12 +202,6 @@ fn as_relative_path(path: &Utf8Path) -> &Utf8Path {
         relative
     } else {
         path
-    }
-}
-
-impl Default for CapsAnalyzer {
-    fn default() -> Self {
-        Self::new("alloc,panic", false) // Default ignored caps and don't show empty
     }
 }
 
@@ -209,33 +223,6 @@ fn filter_capabilities(
         .iter()
         .filter(|cap| !ignored_caps.contains(cap))
         .copied()
-        .collect()
-}
-
-/// Parse a comma-separated string of capability names (lowercase) into a set
-fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
-    caps_str
-        .split(',')
-        .filter_map(|s| {
-            let s = s.trim().to_lowercase();
-            match s.as_str() {
-                "panic" => Some(Capability::Panic),
-                "alloc" => Some(Capability::Alloc),
-                "time" => Some(Capability::Time),
-                "sysinfo" => Some(Capability::Sysinfo),
-                "stdio" => Some(Capability::Stdio),
-                "thread" => Some(Capability::Thread),
-                "net" => Some(Capability::Net),
-                "fas" => Some(Capability::FS),
-                "any" => Some(Capability::Any),
-                _ => {
-                    if !s.is_empty() {
-                        eprintln!("Warning: unknown capability '{s}' in ignored-caps");
-                    }
-                    None
-                }
-            }
-        })
         .collect()
 }
 

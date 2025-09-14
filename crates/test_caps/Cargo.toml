@@ -28,5 +28,3 @@ all = [
     "fread",
     "fwrite",
 ]
-
-[dependencies]

@@ -9,7 +9,10 @@ use cargo_metadata::{DependencyKind, Message, MetadataCommand, Package, PackageI
 use clap::Parser;
 use itertools::Itertools as _;
 
-use crate::analyzer::{CapsAnalyzer, CrateInfo, CrateKind};
+use crate::{
+    Capability, CapabilitySet,
+    analyzer::{CapsAnalyzer, CrateInfo, CrateKind},
+};
 
 #[derive(Parser)]
 /// Analyze capabilities by running cargo build
@@ -36,7 +39,7 @@ pub struct BuildCommand {
     pub quiet: bool,
 
     /// Capabilities to ignore when displaying results (comma-separated, lowercase)
-    #[arg(long = "ignored-caps", default_value = "alloc,time,panic")]
+    #[arg(long = "ignored-caps", default_value = "alloc,stdio,time,panic")]
     pub ignored_caps: String,
 
     /// Show crates with no capabilities after filtering
@@ -44,10 +47,39 @@ pub struct BuildCommand {
     pub show_empty: bool,
 }
 
+/// Parse a comma-separated string of capability names (lowercase) into a set
+fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
+    caps_str
+        .split(',')
+        .filter_map(|s| {
+            let s = s.trim().to_lowercase();
+            match s.as_str() {
+                "panic" => Some(Capability::Panic),
+                "alloc" => Some(Capability::Alloc),
+                "time" => Some(Capability::Time),
+                "sysinfo" => Some(Capability::Sysinfo),
+                "stdio" => Some(Capability::Stdio),
+                "thread" => Some(Capability::Thread),
+                "net" => Some(Capability::Net),
+                "fas" => Some(Capability::FS),
+                "any" => Some(Capability::Any),
+                _ => {
+                    if !s.is_empty() {
+                        eprintln!("Warning: unknown capability '{s}' in ignored-caps"); // TODO: error
+                    }
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
 impl BuildCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
         // Analyze dependencies before building
         let crate_infos = self.analyze_dependencies()?;
+
+        let ignored_caps = parse_ignored_caps(&self.ignored_caps);
 
         // Inform user about ignored capabilities if any are specified
         if !self.ignored_caps.is_empty() {
@@ -64,7 +96,7 @@ impl BuildCommand {
         let stdout = child.stdout.take().unwrap();
         let reader = BufReader::new(stdout);
 
-        let mut analyzer = CapsAnalyzer::new(&self.ignored_caps, self.show_empty);
+        let mut analyzer = CapsAnalyzer::new(ignored_caps.clone(), self.show_empty);
 
         for line in reader.lines() {
             let line = line?;

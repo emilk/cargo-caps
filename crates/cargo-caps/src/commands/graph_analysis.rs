@@ -23,7 +23,7 @@ struct Edge {
 
 impl From<CrateKind> for Edge {
     fn from(kind: CrateKind) -> Self {
-        Edge {
+        Self {
             kind: std::iter::once(kind).collect(),
         }
     }
@@ -39,14 +39,14 @@ struct Dag {
 }
 
 impl Dag {
-    pub fn insert_node(&mut self, package_id: PackageId, kind: CrateKind) {
+    pub fn insert_node(&mut self, package_id: &PackageId, kind: CrateKind) {
         let node = Node {
             id: package_id.clone(),
             kind: std::iter::once(kind).collect(),
         };
         let node_idx = self.graph.add_node(node);
-        let prev = self.package_to_node.insert(package_id, node_idx);
-        assert!(prev.is_none());
+        let prev = self.package_to_node.insert(package_id.clone(), node_idx);
+        assert!(prev.is_none(), "Node already existed: {package_id}");
     }
 
     pub fn node_of(&mut self, package_id: PackageId) -> NodeIndex {
@@ -87,7 +87,7 @@ impl Dag {
                 queue.push_back(package_id.clone());
             }
 
-            dag.insert_node(package_id.clone(), CrateKind::Normal);
+            dag.insert_node(package_id, CrateKind::Normal);
         }
 
         while let Some(package_id) = queue.pop_front() {
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn test_dag() {
         let mut dag = Dag::default();
-        dag.insert_node(pid("binary"), CrateKind::Normal);
+        dag.insert_node(&pid("binary"), CrateKind::Normal);
         dag.add_edge(
             pid("binary"),
             pid("build_dep"),

@@ -60,6 +60,13 @@
             "tan",
             "tanf",
 
+            // TODO: extend with https://gcc.gnu.org/onlinedocs/gccint/Soft-float-library-routines.html
+            // int <-> float conversions:
+            "fixdfti",
+            "fixsfti",
+            "fixunsdfti",
+            "fixunssfti",
+
             "pthread_cond_*",
             "pthread_mutex_*",
             "close", // Closing a FILE is fine
@@ -215,6 +222,9 @@
         ],
         patterns: [
             "std::io::*",
+            "std::os::fd::owned::AsFd",
+            "std::os::fd::owned::BorrowedFd::borrow_raw",
+            "std::sys::io::io_slice::*",
             "std::sys::pal::unix::stdio::*",
         ],
     ),
