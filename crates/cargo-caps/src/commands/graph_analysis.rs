@@ -160,7 +160,9 @@ impl Dag {
         use petgraph::algo::toposort;
         let topo_order = toposort(&self.graph, None)
             .map_err(|_ignored| anyhow::anyhow!("The dependency graph has cycles"))?;
-        for &node_idx in topo_order.iter().rev() {
+
+        // Process nodes in topological order
+        for &node_idx in &topo_order {
             let node_kind = self.graph[node_idx].kind.clone();
 
             // Collect edge information to avoid borrow checker issues
