@@ -9,7 +9,7 @@ use std::ops::Deref;
 /// # Examples
 ///
 /// ```
-/// use capabara::rust_path::RustPath;
+/// use cargo_caps::rust_path::RustPath;
 ///
 /// let path = RustPath::new("std::collections::Vec");
 /// assert_eq!(path.as_str(), "std::collections::Vec");
@@ -24,7 +24,7 @@ impl RustPath {
     /// # Examples
     ///
     /// ```
-    /// use capabara::rust_path::RustPath;
+    /// use cargo_caps::rust_path::RustPath;
     ///
     /// let path = RustPath::new("std::io::cursor::Cursor<T>");
     /// assert_eq!(path.as_str(), "std::io::cursor::Cursor<T>");
@@ -39,7 +39,7 @@ impl RustPath {
     /// # Examples
     ///
     /// ```
-    /// use capabara::rust_path::RustPath;
+    /// use cargo_caps::rust_path::RustPath;
     ///
     /// let path = RustPath::new("core::mem::size_of");
     /// assert_eq!(path.as_str(), "core::mem::size_of");
@@ -55,7 +55,7 @@ impl RustPath {
     /// # Examples
     ///
     /// ```
-    /// use capabara::rust_path::RustPath;
+    /// use cargo_caps::rust_path::RustPath;
     ///
     /// let path = RustPath::new("std::collections::Vec");
     /// assert_eq!(path.segments(), vec!["std", "collections", "Vec"]);

@@ -1,19 +1,18 @@
-# Capabara
+# cargo-caps
 
 A Rust tool for extracting and demangling linker symbols for macOS binaries, organized by crate.
 
 ## Test it
 
-Run capabara on self:
+Run cargo-caps on self:
 
 ```bash
-./bootstrap.sh
+cargo run -p cargo-caps -- build
 ```
 
 ## Warning
-This is a vibe-coded experiment.
-
 Only tested on macOS.
+Some of the code was AI generated and has not yet been vetted by human eyes.
 
 ## Capabilities
 Some that come to mind:
@@ -55,7 +54,7 @@ We do the same for common sys-calls.
 For some crates (hopefull most!), the capabilities is just the union of the capabilities of all its  dependent crates.
 This means that if we have accurate capabilities for all the crates it depend on, we can confidently assign capabilities to the crate without having to audit it.
 
-However, there will be some _edge_ crates where that won't work, if it uses some 3rd party thing that is opaque to Capabara (e.g. dynamically linking with a C library).
+However, there will be some _edge_ crates where that won't work, if it uses some 3rd party thing that is opaque to cargo-caps (e.g. dynamically linking with a C library).
 In these cases, we must conservatively assign them the "All" capability set (the union of everything).
 However, this will infect all dependent crates, so that the whole crate eco system gets labels with "All".
 If a `curl` crate interacts with `libcurl`, we want some way to say "The capability of this crate is actually just Network".
@@ -64,4 +63,4 @@ For this we need _signing_. A trusted person verifies that the crate has a certa
 Another example: `ffmpeg-sidecar` is a crate that starts and controls an `ffmpeg` process.
 If you trust ffmpeg not to do any shenanigans, then you could sign `ffmpeg-sidecar` to be excluded for `Net` and `FileSystem` capbilties.
 
-Currently a Rust developer ha to verify _all_ dependencies it pulls in (even transitive ones!), but with capabara you only need to trust these (hopefully few) _edge_ crates.
+Currently a Rust developer ha to verify _all_ dependencies it pulls in (even transitive ones!), but with cargo-caps you only need to trust these (hopefully few) _edge_ crates.

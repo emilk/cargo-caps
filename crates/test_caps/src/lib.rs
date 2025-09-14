@@ -77,7 +77,7 @@ pub fn test_capabilities() {
         use std::io::Write;
 
         // Create and write to a temporary file
-        let temp_path = "/tmp/capabara_test_write_file";
+        let temp_path = "/tmp/cargo_caps_test_write_file";
         if let Ok(mut file) = fs::File::create(temp_path) {
             let _ = file.write_all(b"Hello, file system!");
             let _ = fs::remove_file(temp_path);
