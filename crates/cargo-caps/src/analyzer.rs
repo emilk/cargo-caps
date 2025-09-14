@@ -182,7 +182,23 @@ impl CapsAnalyzer {
                 "😌 none".to_owned()
             } else if filtered_caps.contains(&Capability::Any) {
                 // If "Any" is present, show only that
-                format!("{}Any", Capability::Any.emoji())
+                let reasons = deduced_caps
+                    .known_crates
+                    .iter()
+                    .filter_map(|(name, caps)| {
+                        caps.contains(&Capability::Any).then_some(name.clone())
+                    })
+                    .collect_vec();
+                let dep_word = if reasons.len() == 1 {
+                    "dependency"
+                } else {
+                    "dependencies"
+                };
+                let reasons = reasons.iter().join(", ");
+                format!(
+                    "{}Any because of {dep_word} on {reasons}",
+                    Capability::Any.emoji()
+                )
             } else {
                 let cap_names: Vec<String> = filtered_caps
                     .iter()
