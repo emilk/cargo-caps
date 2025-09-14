@@ -74,8 +74,16 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
 
 impl BuildCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
-        // Analyze dependencies before building
-        let crate_infos = self.analyze_dependencies()?;
+        let crate_infos = match self.calc_crate_kinds() {
+            Ok(crate_infos) => Some(crate_infos),
+            Err(err) => {
+                eprintln!(
+                    "Failed to analyze crate graph. cargo-deps won't understand if a dependency is a build-dependency, a dev-dependency, etc. Error: {err}"
+                );
+                eprintln!();
+                None
+            }
+        };
 
         let ignored_caps = parse_ignored_caps(&self.ignored_caps);
 
@@ -95,7 +103,7 @@ impl BuildCommand {
             if let Ok(message) = serde_json::from_str::<Message>(&line)
                 && let Message::CompilerArtifact(artifact) = message
             {
-                analyze_artifact(&mut analyzer, &crate_infos, verbose, &artifact)
+                analyze_artifact(&mut analyzer, crate_infos.as_ref(), verbose, &artifact)
                     .with_context(|| format!("Name: {}", artifact.target.name))?;
             }
         }
@@ -128,7 +136,7 @@ impl BuildCommand {
         Ok(())
     }
 
-    fn analyze_dependencies(&self) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
+    fn calc_crate_kinds(&self) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
         let metadata = self.gather_cargo_metadata()?;
 
         // Get the package(s) we're interested in
@@ -145,7 +153,7 @@ impl BuildCommand {
 
         if true {
             let sources = target_packages.iter().map(|p| p.id.clone()).collect_vec();
-            super::graph_analysis::analyze_dependency_dag(&metadata, &sources)
+            super::graph_analysis::analyze_dependency_graph(&metadata, &sources)
         } else {
             let package_map: HashMap<&PackageId, &Package> =
                 metadata.packages.iter().map(|p| (&p.id, p)).collect();
@@ -247,30 +255,37 @@ impl BuildCommand {
 
 fn analyze_artifact(
     analyzer: &mut CapsAnalyzer,
-    crate_infos: &HashMap<PackageId, CrateInfo>,
+    crate_infos: Option<&HashMap<PackageId, CrateInfo>>,
     verbose: bool,
     artifact: &cargo_metadata::Artifact,
 ) -> Result<(), anyhow::Error> {
     // TODO: all TargetKind?
     if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
-        let name = &artifact.target.name;
-        let crate_info = crate_infos.get(&artifact.package_id);
-        if let Some(crate_info) = crate_info {
-            for file_path in &artifact.filenames {
-                if file_path.as_str().ends_with(".rlib") {
-                    analyzer.add_crate(artifact, file_path)?;
-                    let did_print =
-                        analyzer.print_crate_info(artifact, crate_info, file_path, verbose)?;
-                    if !did_print {
-                        analyzer.num_skipped += 1;
-                    }
-                }
+        // let name = &artifact.target.name;
+        let crate_info = if let Some(crate_infos) = crate_infos {
+            if let Some(crate_info) = crate_infos.get(&artifact.package_id) {
+                Some(crate_info)
+            } else {
+                // Not sure why we sometimes end up here.
+                // Examples: bitflags block2 objc2 objc2_app_kit
+                // anyhow::bail!("ERROR: unknown crate {name:?}");
+                // eprintln!("ERROR: unknown crate {name:?}"); // TODO: continue, then exit with error
+                return Ok(());
+                // None
             }
         } else {
-            // Not sure why we sometimes end up here.
-            // Examples: bitflags block2 objc2 objc2_app_kit
-            // anyhow::bail!("ERROR: unknown crate {name:?}");
-            eprintln!("ERROR: unknown crate {name:?}"); // TODO: continue, then exit with error
+            None
+        };
+
+        for file_path in &artifact.filenames {
+            if file_path.as_str().ends_with(".rlib") {
+                analyzer.add_crate(artifact, file_path)?;
+                let did_print =
+                    analyzer.print_crate_info(artifact, crate_info, file_path, verbose)?;
+                if !did_print {
+                    analyzer.num_skipped += 1;
+                }
+            }
         }
     }
     Ok(())

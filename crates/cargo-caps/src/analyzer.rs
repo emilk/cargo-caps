@@ -93,7 +93,7 @@ impl CapsAnalyzer {
     pub fn print_crate_info(
         &self,
         artifact: &Artifact,
-        crate_info: &CrateInfo,
+        crate_info: Option<&CrateInfo>,
         bin_path: &Utf8PathBuf,
         verbose: bool,
     ) -> anyhow::Result<bool> {
@@ -102,10 +102,14 @@ impl CapsAnalyzer {
         let deduced_caps = &self.crate_caps[&crate_name];
 
         let crate_kind_suffix = {
-            if crate_info.kind.contains(&CrateKind::Normal) {
-                String::new() // Not worth mentioning
+            if let Some(crate_info) = crate_info {
+                if crate_info.kind.contains(&CrateKind::Normal) {
+                    String::new() // Not worth mentioning
+                } else {
+                    format!(" ({})", crate_info.kind.iter().join(", "))
+                }
             } else {
-                format!(" ({})", crate_info.kind.iter().join(", "))
+                String::new()
             }
         };
 
@@ -199,7 +203,9 @@ impl CapsAnalyzer {
                 println!("  features: {}", features.join(", "));
             }
 
-            println!("Kind: {}", crate_info.kind.iter().join(", "));
+            if let Some(crate_info) = crate_info {
+                println!("Kind: {}", crate_info.kind.iter().join(", "));
+            }
 
             println!();
         }

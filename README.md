@@ -2,6 +2,18 @@
 
 A Rust tool for extracting and demangling linker symbols for macOS binaries, organized by crate.
 
+## Installation
+`cargo install --path ./crates/cargo-caps/`
+
+## Run it
+Make sure your in the root of a cargo project, then run:
+
+> `cargo-caps build`
+
+This will build your local project, and while doing so, print the capabilities of each crate it depends on, directly or indirectly.
+
+// TODO: show example output
+
 ## Test it
 
 Run cargo-caps on self:
@@ -29,9 +41,6 @@ Some that come to mind:
 We also have `None` for the empty set an `All` for the complete set.
 
 Thing that will get you put in the `All` bucket includes calling into an opaque library, or starting another process.
-
-## Installation
-`cargo install --path ./crates/cargo-caps/`
 
 
 

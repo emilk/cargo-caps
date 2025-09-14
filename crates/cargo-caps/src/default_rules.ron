@@ -74,6 +74,7 @@
             // Thread Local Variable
             "tlv_bootstrap",
 
+            "divt*",
             "muloti*", // Multiply?
             "sdiv*", // unsigned div
             "smod*", // unsigned modulus
