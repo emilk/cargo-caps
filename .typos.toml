@@ -1,0 +1,6 @@
+# https://github.com/crate-ci/typos
+# install:  cargo install typos-cli
+# run:      typos
+
+[default.extend-words]
+typ = "typ" # "type" is a reserved word in Rust
