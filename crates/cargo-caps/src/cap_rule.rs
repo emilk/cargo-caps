@@ -109,5 +109,5 @@ pub fn default_rules() -> Rules {
 fn test_default_rules() {
     let rules = default_rules();
     assert_eq!(rules.match_symbol("unknown"), None);
-    // TODO: more santiy checking
+    // TODO: more sanity checking
 }

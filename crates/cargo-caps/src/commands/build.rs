@@ -259,7 +259,7 @@ fn collect_transitive_deps(
                 collect_transitive_deps(&dep_package.id, package_map, visited, all_deps);
             } else {
                 // I think we get here for dependencies that are disabled for this feature set
-                // eprintln!("ERROR: failed to find packge {:?}", dep.name);
+                // eprintln!("ERROR: failed to find package {:?}", dep.name);
             }
         }
     }

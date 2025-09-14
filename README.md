@@ -51,7 +51,7 @@ We do the same for common sys-calls.
 
 
 ### Signing edge crates
-For some crates (hopefull most!), the capabilities is just the union of the capabilities of all its  dependent crates.
+For some crates (hopefully most!), the capabilities is just the union of the capabilities of all its  dependent crates.
 This means that if we have accurate capabilities for all the crates it depend on, we can confidently assign capabilities to the crate without having to audit it.
 
 However, there will be some _edge_ crates where that won't work, if it uses some 3rd party thing that is opaque to cargo-caps (e.g. dynamically linking with a C library).

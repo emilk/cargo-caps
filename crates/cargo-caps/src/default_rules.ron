@@ -3,7 +3,7 @@
         // Stuff that anyone is allowed to use:
         caps: [],
         patterns: [
-            // Anonymous functions… I think these are things LLVM generates, and shuld be fine.
+            // Anonymous functions… I think these are things LLVM generates, and should be fine.
             // Curiously, they only show up in optimized builds.
             "anon.*",
 
@@ -68,9 +68,9 @@
             "tlv_bootstrap",
 
             "muloti*", // Multiply?
-            "sdiv*", // unsignd div
+            "sdiv*", // unsigned div
             "smod*", // unsigned modulus
-            "udiv*", // unsignd div
+            "udiv*", // unsigned div
             "umod*", // unsigned modulus
 
             "Unwind_Resume", // Rust exception handling
@@ -136,7 +136,7 @@
             "alloc::*",
         ],
     ),
-    // NOTE: Everythng in std is generally allowed to allocate and panic
+    // NOTE: Everything in std is generally allowed to allocate and panic
     (
         caps: [
             Alloc, Panic,

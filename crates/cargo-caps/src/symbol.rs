@@ -181,7 +181,7 @@ pub enum TypeName {
     },
 
     /// `<type_name as trait_name>::associated_type`
-    AssosiatedPath {
+    AssociatedPath {
         type_name: Box<TypeName>,
         trait_name: Box<TypeName>,
         associated_type: RustPath,
@@ -210,7 +210,7 @@ impl fmt::Display for TypeName {
             } => {
                 write!(f, "<{type_name} as {trait_name}>")
             }
-            Self::AssosiatedPath {
+            Self::AssociatedPath {
                 type_name,
                 trait_name,
                 associated_type,
@@ -268,7 +268,7 @@ impl TypeName {
                             // <Type as Trait>::Name
                             let associated_type = &symbol[i + 3..];
                             // dbg!(&type_name, &trait_name, &associated_type);
-                            return Ok(Self::AssosiatedPath {
+                            return Ok(Self::AssociatedPath {
                                 type_name: Box::new(Self::parse(type_name)?),
                                 trait_name: Box::new(Self::parse(trait_name)?),
                                 associated_type: RustPath::new(associated_type),
@@ -296,7 +296,7 @@ impl TypeName {
 
             anyhow::bail!("Bad type name: {symbol:?}")
         } else if symbol.starts_with('(') {
-            // Parse (a,b,c), taking care to only break on commas that are NOT within nested paranthesis:
+            // Parse (a,b,c), taking care to only break on commas that are NOT within nested parenthesis:
             let mut elements = vec![];
             let mut parens_depth = 0;
 
@@ -354,7 +354,7 @@ impl TypeName {
                 type_name,
                 trait_name,
             }
-            | Self::AssosiatedPath {
+            | Self::AssociatedPath {
                 type_name,
                 trait_name,
                 associated_type: _, // Doesn't belong to a crate, so we do not care

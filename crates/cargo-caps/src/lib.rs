@@ -26,10 +26,10 @@ pub mod rust_path;
 pub mod symbol;
 pub mod tree;
 
-pub use crate_name::CrateName;
 pub use commands::Commands;
+pub use crate_name::CrateName;
 
-/// Extact symbols from an executable or an .rlib.
+/// Extract symbols from an executable or an .rlib.
 pub fn extract_symbols(binary_path: &Path) -> Result<Vec<Symbol>> {
     let file_bytes = fs::read(binary_path)
         .with_context(|| format!("Failed to read {}", binary_path.display()))?;

@@ -60,7 +60,7 @@ impl Capability {
 }
 
 #[derive(Clone)]
-pub struct DeducedCapablities {
+pub struct DeducedCapabilities {
     /// The known capabilities of this crate
     pub own_caps: BTreeMap<Capability, Reasons>,
 
@@ -77,7 +77,7 @@ pub struct DeducedCapablities {
     rules: Rules, // TODO: move out somewhere else
 }
 
-impl Default for DeducedCapablities {
+impl Default for DeducedCapabilities {
     fn default() -> Self {
         Self {
             own_caps: Default::default(),
@@ -94,7 +94,7 @@ pub type Reasons = BTreeSet<Reason>;
 
 pub type Reason = Symbol;
 
-impl DeducedCapablities {
+impl DeducedCapabilities {
     pub fn from_symbols(symbols: impl IntoIterator<Item = Symbol>) -> anyhow::Result<Self> {
         let mut slf = Self::default();
         for symbol in symbols {

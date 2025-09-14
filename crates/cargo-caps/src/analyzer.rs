@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     CrateName,
-    capability::{Capability, CapabilitySet, DeducedCapablities},
+    capability::{Capability, CapabilitySet, DeducedCapabilities},
 };
 use cargo_metadata::{
     Artifact,
@@ -28,7 +28,7 @@ pub struct CrateInfo {
 }
 
 pub struct CapsAnalyzer {
-    lib_caps: HashMap<CrateName, DeducedCapablities>,
+    lib_caps: HashMap<CrateName, DeducedCapabilities>,
     ignored_caps: CapabilitySet,
     show_empty: bool,
 }
@@ -242,8 +242,8 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
         .collect()
 }
 
-fn deduce_caps_of_binary(path: &Path) -> anyhow::Result<DeducedCapablities> {
+fn deduce_caps_of_binary(path: &Path) -> anyhow::Result<DeducedCapabilities> {
     let symbols = crate::extract_symbols(path)?;
     let filtered_symbols = crate::filter_symbols(symbols, false, false);
-    DeducedCapablities::from_symbols(filtered_symbols)
+    DeducedCapabilities::from_symbols(filtered_symbols)
 }

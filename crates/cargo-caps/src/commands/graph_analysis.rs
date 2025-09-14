@@ -149,7 +149,7 @@ pub fn analyze_dependency_dag(
             .collect();
         for (dependency_idx, edge_data) in node_edges {
             // Calculate the new kinds for the dependency
-            let new_kinds = depenency_kind_from_edge_and_dependent(
+            let new_kinds = dependency_kind_from_edge_and_dependent(
                 &edge_data,
                 &Node {
                     id: dag.graph[node_idx].id.clone(),
@@ -178,7 +178,7 @@ pub fn analyze_dependency_dag(
 
 /// We are looking at a dependency.
 /// How should we color the dependency with `kind`?
-fn depenency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTreeSet<CrateKind> {
+fn dependency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTreeSet<CrateKind> {
     let mut final_set = BTreeSet::default();
 
     for &dep_kind in &edge.kind {
