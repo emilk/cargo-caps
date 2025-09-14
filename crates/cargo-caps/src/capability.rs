@@ -42,6 +42,22 @@ pub enum Capability {
     Any,
 }
 
+impl std::fmt::Display for Capability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Panic => write!(f, "panic"),
+            Self::Alloc => write!(f, "alloc"),
+            Self::Time => write!(f, "time"),
+            Self::Sysinfo => write!(f, "sysinfo"),
+            Self::Stdio => write!(f, "stdio"),
+            Self::Thread => write!(f, "thread"),
+            Self::Net => write!(f, "net"),
+            Self::FS => write!(f, "fs"),
+            Self::Any => write!(f, "any"),
+        }
+    }
+}
+
 impl Capability {
     pub fn emoji(&self) -> &'static str {
         use Capability::{Alloc, Any, FS, Net, Panic, Stdio, Sysinfo, Thread, Time};

@@ -1,5 +1,3 @@
-use clap::Parser;
-
 pub mod build;
 pub mod caps;
 mod graph_analysis;
@@ -9,12 +7,17 @@ pub use build::BuildCommand;
 pub use caps::CapsCommand;
 pub use symbols::SymbolCommand;
 
-#[derive(Parser)]
+#[derive(clap::Subcommand)]
 pub enum Commands {
-    /// Analyze capabilities by running cargo build
+    /// Analyze crate capabilities by running cargo build
+    #[command(name = "build")]
     Build(BuildCommand),
-    /// Extract and analyze symbols from binaries
-    Symbols(SymbolCommand),
-    /// Extract and analyze capabilities from a single binary
+
+    /// Extract and analyze capabilities of a particular crate
+    #[command(name = "caps")]
     Caps(CapsCommand),
+
+    /// Extract and analyze symbols of a binary
+    #[command(name = "symbols")]
+    Symbols(SymbolCommand),
 }

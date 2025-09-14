@@ -1,10 +1,8 @@
 use std::path::PathBuf;
 
-use clap::Parser;
 use crate::capability::{Capability, DeducedCapabilities};
 
-#[derive(Parser)]
-/// Extract symbols from binaries and analyze their capabilities
+#[derive(clap::Parser)]
 pub struct CapsCommand {
     /// Path to the binary file
     pub binary_path: PathBuf,

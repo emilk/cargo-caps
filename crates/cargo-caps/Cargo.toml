@@ -1,7 +1,13 @@
 [package]
 name = "cargo-caps"
+publish = true
 edition.workspace = true
 rust-version.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "cargo-caps"
+path = "src/main.rs"
 
 [lints]
 workspace = true
@@ -20,7 +26,3 @@ ron.workspace = true
 rustc-demangle.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-
-[[bin]]
-name = "cargo-caps"
-path = "src/main.rs"

@@ -6,7 +6,6 @@ use std::{
 
 use anyhow::Context as _;
 use cargo_metadata::{DependencyKind, Message, MetadataCommand, Package, PackageId, TargetKind};
-use clap::Parser;
 use itertools::Itertools as _;
 
 use crate::{
@@ -14,8 +13,7 @@ use crate::{
     analyzer::{CapsAnalyzer, CrateInfo, CrateKind},
 };
 
-#[derive(Parser)]
-/// Analyze capabilities by running cargo build
+#[derive(clap::Parser)]
 pub struct BuildCommand {
     #[arg(short = 'v', long = "verbose")]
     pub verbose: bool,
@@ -81,12 +79,6 @@ impl BuildCommand {
 
         let ignored_caps = parse_ignored_caps(&self.ignored_caps);
 
-        // Inform user about ignored capabilities if any are specified
-        if !self.ignored_caps.is_empty() {
-            println!("ignored-caps: {}", self.ignored_caps);
-            println!();
-        }
-
         let mut cmd = self.make_cargo_command();
 
         let verbose = self.verbose;
@@ -109,6 +101,24 @@ impl BuildCommand {
         }
 
         child.wait()?;
+
+        if 0 < analyzer.num_skipped {
+            println!();
+
+            if ignored_caps.is_empty() {
+                println!(
+                    "Skipped printing {} crate(s) that had zero capabilities",
+                    analyzer.num_skipped
+                );
+            } else {
+                println!(
+                    "Skipped printing {} crate(s) that only had the following capabilities (or less): {}",
+                    analyzer.num_skipped,
+                    ignored_caps.iter().join(", ")
+                );
+            }
+            println!("(You can control this with --ignored-caps)");
+        }
 
         println!();
         println!(
@@ -248,7 +258,12 @@ fn analyze_artifact(
         if let Some(crate_info) = crate_info {
             for file_path in &artifact.filenames {
                 if file_path.as_str().ends_with(".rlib") {
-                    analyzer.add_lib_or_bin(artifact, crate_info, file_path, verbose)?;
+                    analyzer.add_crate(artifact, file_path)?;
+                    let did_print =
+                        analyzer.print_crate_info(artifact, crate_info, file_path, verbose)?;
+                    if !did_print {
+                        analyzer.num_skipped += 1;
+                    }
                 }
             }
         } else {

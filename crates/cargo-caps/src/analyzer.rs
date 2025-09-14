@@ -40,38 +40,37 @@ pub struct CrateInfo {
 }
 
 pub struct CapsAnalyzer {
-    lib_caps: HashMap<CrateName, DeducedCapabilities>,
+    crate_caps: HashMap<CrateName, DeducedCapabilities>,
     ignored_caps: CapabilitySet,
     show_empty: bool,
+    pub num_skipped: usize,
 }
 
 impl CapsAnalyzer {
     pub fn new(ignored_caps: CapabilitySet, show_empty: bool) -> Self {
         Self {
-            lib_caps: HashMap::new(),
+            crate_caps: HashMap::new(),
             ignored_caps,
             show_empty,
+            num_skipped: 0,
         }
     }
 
-    pub fn add_lib_or_bin(
+    pub fn add_crate(
         &mut self,
         artifact: &Artifact,
-        crate_info: &CrateInfo,
         bin_path: &Utf8PathBuf,
-        verbose: bool,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<DeducedCapabilities> {
         let target = &artifact.target;
         let crate_name = CrateName::new(&target.name)?;
-        let path = PathBuf::from(bin_path.as_str());
+        let bin_path = PathBuf::from(bin_path.as_str()); // TODO: use camino everywhere
 
-        // Analyze capabilities for this rlib
-        let mut deduced_caps = deduce_caps_of_binary(&path)?;
+        let mut deduced_caps = deduce_caps_of_binary(&bin_path)?;
 
         deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
 
         for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
-            if let Some(dep_caps) = self.lib_caps.get(&dep_crate_name) {
+            if let Some(dep_caps) = self.crate_caps.get(&dep_crate_name) {
                 deduced_caps
                     .known_crates
                     .entry(dep_crate_name)
@@ -84,9 +83,23 @@ impl CapsAnalyzer {
             }
         }
 
-        // Remember capabilities:
-        self.lib_caps
+        self.crate_caps
             .insert(crate_name.clone(), deduced_caps.clone());
+
+        Ok(deduced_caps)
+    }
+
+    /// Rerturns true if we did print.
+    pub fn print_crate_info(
+        &self,
+        artifact: &Artifact,
+        crate_info: &CrateInfo,
+        bin_path: &Utf8PathBuf,
+        verbose: bool,
+    ) -> anyhow::Result<bool> {
+        let target = &artifact.target;
+        let crate_name = CrateName::new(&target.name)?;
+        let deduced_caps = &self.crate_caps[&crate_name];
 
         let crate_kind_suffix = {
             if crate_info.kind.contains(&CrateKind::Normal) {
@@ -127,7 +140,7 @@ impl CapsAnalyzer {
                 if self.show_empty {
                     "😌 none".to_owned()
                 } else {
-                    return Ok(()); // TODO: respect verbose? maybe?
+                    return Ok(false); // TODO: respect verbose? maybe?
                 }
             } else {
                 let cap_names: String = crate_deps
@@ -157,7 +170,7 @@ impl CapsAnalyzer {
 
             // Check if we should skip this crate (no capabilities after filtering)
             if filtered_caps.is_empty() && !self.show_empty {
-                return Ok(()); // TODO: respect verbose? maybe?
+                return Ok(false); // TODO: respect verbose? maybe?
             }
 
             // Print short description using filtered capabilities
@@ -191,7 +204,7 @@ impl CapsAnalyzer {
             println!();
         }
 
-        Ok(())
+        Ok(true)
     }
 }
 

@@ -1,10 +1,8 @@
 use std::path::PathBuf;
 
-use clap::Parser;
 use crate::print::PrintOptions;
 
-#[derive(Parser)]
-/// Extract and analyze symbols from binaries
+#[derive(clap::Parser)]
 pub struct SymbolCommand {
     /// Paths to the binary files
     pub binary_paths: Vec<PathBuf>,
@@ -60,15 +58,17 @@ impl SymbolCommand {
             if i > 0 {
                 println!("\n{}", "=".repeat(80));
             }
-            
+
             let symbols = crate::extract_symbols(binary_path)?;
             let original_count = symbols.len();
-            let filtered_symbols = crate::filter_symbols(symbols, self.include_local, self.include_all_kinds);
-            
+            let filtered_symbols =
+                crate::filter_symbols(symbols, self.include_local, self.include_all_kinds);
+
             if self.show_metadata && filtered_symbols.len() < original_count {
                 eprintln!(
                     "Filtered {} -> {} symbols (use --include-local and/or --include-all-kinds to show more)",
-                    original_count, filtered_symbols.len()
+                    original_count,
+                    filtered_symbols.len()
                 );
             }
 
