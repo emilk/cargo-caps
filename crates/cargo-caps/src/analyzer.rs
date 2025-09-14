@@ -22,7 +22,7 @@ pub enum CrateKind {
     ProcMacro,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct CrateInfo {
     pub kind: BTreeSet<CrateKind>,
 }
@@ -118,10 +118,7 @@ impl CapsAnalyzer {
             }
         } else if let Some(reasons) = deduced_caps.own_caps.get(&Capability::Any) {
             // Why do we think this crate needs the `Any` capability?
-            let mut info = format!(
-                "{}Any because of",
-                Capability::Any.emoji()
-            );
+            let mut info = format!("{}Any because of", Capability::Any.emoji());
             // TODO: pick a few reasons at random instead of the first N
             let max_width = 80;
             for symbol in reasons {

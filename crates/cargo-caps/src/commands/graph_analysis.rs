@@ -1,57 +1,82 @@
 use std::collections::{BTreeSet, HashMap};
 
 use cargo_metadata::{DependencyKind, Metadata, PackageId};
-use petgraph::{Directed, Graph, graph::NodeIndex, visit::EdgeRef as _};
+use petgraph::{Directed, graph::NodeIndex, visit::EdgeRef as _};
 
 use crate::analyzer::{CrateInfo, CrateKind};
 
+/// A package in the dependency graph.
 #[derive(Debug, Clone)]
 struct Node {
     id: PackageId,
+
     // All the different ways this package is used
     kind: BTreeSet<CrateKind>,
 }
 
-/// Directed edge data
+/// "Depends on".
 #[derive(Debug, Clone)]
 struct Edge {
     // how the dependent is using the dependee
     kind: BTreeSet<CrateKind>,
 }
 
+impl From<CrateKind> for Edge {
+    fn from(kind: CrateKind) -> Self {
+        Edge {
+            kind: std::iter::once(kind).collect(),
+        }
+    }
+}
+
+/// A graph of the dependencies between packages,
+/// with edges pointing from dependent to dependee,
+/// so an edge means "depends on".
+#[derive(Default)]
 struct Dag {
-    graph: Graph<Node, Edge, Directed>,
+    graph: petgraph::Graph<Node, Edge, Directed>,
     package_to_node: HashMap<PackageId, NodeIndex>,
 }
 
 impl Dag {
-    fn new() -> Self {
-        Self {
-            graph: Graph::new(),
-            package_to_node: HashMap::new(),
+    pub fn insert_node(&mut self, package_id: PackageId, kind: CrateKind) {
+        let node = Node {
+            id: package_id.clone(),
+            kind: std::iter::once(kind).collect(),
+        };
+        let node_idx = self.graph.add_node(node);
+        let prev = self.package_to_node.insert(package_id, node_idx);
+        assert!(prev.is_none());
+    }
+
+    pub fn node_of(&mut self, package_id: PackageId) -> NodeIndex {
+        match self.package_to_node.entry(package_id.clone()) {
+            std::collections::hash_map::Entry::Occupied(occupied_entry) => *occupied_entry.get(),
+            std::collections::hash_map::Entry::Vacant(vacant_entry) => {
+                let node = Node {
+                    id: package_id,
+                    kind: BTreeSet::new(),
+                };
+                let node_idx = self.graph.add_node(node);
+                vacant_entry.insert(node_idx);
+                node_idx
+            }
         }
     }
 
-    fn get_or_create_node(&mut self, package_id: PackageId) -> NodeIndex {
-        if let Some(&node_idx) = self.package_to_node.get(&package_id) {
-            node_idx
-        } else {
-            let node = Node {
-                id: package_id.clone(),
-                kind: BTreeSet::new(),
-            };
-            let node_idx = self.graph.add_node(node);
-            self.package_to_node.insert(package_id, node_idx);
-            node_idx
-        }
+    pub fn add_edge(&mut self, dependent_: PackageId, dependency: PackageId, edge: Edge) {
+        let dependent = self.node_of(dependent_);
+        let dependency = self.node_of(dependency);
+        self.graph.add_edge(dependent, dependency, edge);
     }
 
-    fn build(
-        &mut self,
+    pub fn from_metadata(
         metadata: &Metadata,
         starting_packages: &[PackageId],
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Self> {
         use std::collections::VecDeque;
+
+        let mut dag = Self::default();
 
         let mut queue = VecDeque::new();
         let mut visited = std::collections::HashSet::new();
@@ -61,11 +86,11 @@ impl Dag {
             if visited.insert(package_id.clone()) {
                 queue.push_back(package_id.clone());
             }
+
+            dag.insert_node(package_id.clone(), CrateKind::Normal);
         }
 
         while let Some(package_id) = queue.pop_front() {
-            let dependent_idx = self.get_or_create_node(package_id.clone());
-
             // Find the package in metadata
             let package = metadata
                 .packages
@@ -85,8 +110,6 @@ impl Dag {
                     .iter()
                     .find(|p| p.name.as_str() == dep.name.as_str())
                 {
-                    let dependency_idx = self.get_or_create_node(dep_package.id.clone());
-
                     // Create edge with dependency kind
                     let mut edge_kind = BTreeSet::new();
                     edge_kind.insert(match dep.kind {
@@ -103,13 +126,61 @@ impl Dag {
                     let edge = Edge { kind: edge_kind };
 
                     // Add edge from dependent to dependency
-                    self.graph.add_edge(dependent_idx, dependency_idx, edge);
+                    dag.add_edge(package_id.clone(), dep_package.id.clone(), edge);
 
                     // Add dependency to queue if not already visited
                     if visited.insert(dep_package.id.clone()) {
                         queue.push_back(dep_package.id.clone());
                     }
                 }
+            }
+        }
+
+        Ok(dag)
+    }
+
+    fn anayze(mut self) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
+        self.compute_dependency_kinds()?;
+
+        Ok(self
+            .package_to_node
+            .iter()
+            .map(|(package_id, &node_idx)| {
+                let node = &self.graph[node_idx];
+                let crate_info = CrateInfo {
+                    kind: node.kind.clone(),
+                };
+                (package_id.clone(), crate_info)
+            })
+            .collect())
+    }
+
+    fn compute_dependency_kinds(&mut self) -> Result<(), anyhow::Error> {
+        // Flood-fill the Node kinds by visiting the graph in topological order
+        use petgraph::algo::toposort;
+        let topo_order = toposort(&self.graph, None)
+            .map_err(|_ignored| anyhow::anyhow!("The dependency graph has cycles"))?;
+        for &node_idx in topo_order.iter().rev() {
+            let node_kind = self.graph[node_idx].kind.clone();
+
+            // Collect edge information to avoid borrow checker issues
+            let node_edges: Vec<(NodeIndex, Edge)> = self
+                .graph
+                .edges(node_idx)
+                .map(|edge| (edge.target(), edge.weight().clone()))
+                .collect();
+            for (dependency_idx, edge_data) in node_edges {
+                // Calculate the new kinds for the dependency
+                let new_kinds = dependency_kind_from_edge_and_dependent(
+                    &edge_data,
+                    &Node {
+                        id: self.graph[node_idx].id.clone(),
+                        kind: node_kind.clone(),
+                    },
+                );
+
+                // Union with existing kinds
+                self.graph[dependency_idx].kind.extend(new_kinds);
             }
         }
 
@@ -121,59 +192,7 @@ pub fn analyze_dependency_dag(
     metadata: &Metadata,
     sinks: &[PackageId],
 ) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
-    let mut dag = Dag::new();
-
-    dag.build(metadata, sinks)?;
-
-    // Mark all the sink nodes as Normal
-    for sink in sinks {
-        if let Some(&node_idx) = dag.package_to_node.get(sink) {
-            dag.graph[node_idx].kind.insert(CrateKind::Normal);
-        }
-    }
-
-    // Flood-fill the Node kinds by visiting the graph in topological order
-    use petgraph::algo::toposort;
-    let topo_order = toposort(&dag.graph, None)
-        .map_err(|_ignored| anyhow::anyhow!("The dependency graph has cycles"))?;
-
-    // Process nodes in reverse topological order (from sinks backwards)
-    for &node_idx in topo_order.iter().rev() {
-        let node_kind = dag.graph[node_idx].kind.clone();
-
-        // Collect edge information to avoid borrow checker issues
-        let node_edges: Vec<(NodeIndex, Edge)> = dag
-            .graph
-            .edges(node_idx)
-            .map(|edge| (edge.target(), edge.weight().clone()))
-            .collect();
-        for (dependency_idx, edge_data) in node_edges {
-            // Calculate the new kinds for the dependency
-            let new_kinds = dependency_kind_from_edge_and_dependent(
-                &edge_data,
-                &Node {
-                    id: dag.graph[node_idx].id.clone(),
-                    kind: node_kind.clone(),
-                },
-            );
-
-            // Union with existing kinds
-            dag.graph[dependency_idx].kind.extend(new_kinds);
-        }
-    }
-
-    // Convert to CrateInfo map
-    let mut result = HashMap::new();
-    #[expect(clippy::iter_over_hash_type)] // Order doesn't matter for building result map
-    for (package_id, &node_idx) in &dag.package_to_node {
-        let node = &dag.graph[node_idx];
-        let crate_info = CrateInfo {
-            kind: node.kind.clone(),
-        };
-        result.insert(package_id.clone(), crate_info);
-    }
-
-    Ok(result)
+    Dag::from_metadata(metadata, sinks)?.anayze()
 }
 
 /// We are looking at a dependency.
@@ -203,4 +222,39 @@ fn dependency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTr
     }
 
     final_set
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::analyzer::CrateKind;
+    use cargo_metadata::PackageId;
+
+    use super::*;
+
+    fn pid(s: &str) -> PackageId {
+        PackageId { repr: s.to_owned() }
+    }
+
+    fn crate_info(crate_kind: CrateKind) -> CrateInfo {
+        CrateInfo {
+            kind: std::iter::once(crate_kind).collect(),
+        }
+    }
+
+    #[test]
+    fn test_dag() {
+        let mut dag = Dag::default();
+        dag.insert_node(pid("binary"), CrateKind::Normal);
+        dag.add_edge(
+            pid("binary"),
+            pid("build_dep"),
+            Edge::from(CrateKind::Build),
+        );
+        dag.add_edge(pid("build_dep"), pid("3rd"), Edge::from(CrateKind::Normal));
+        let result = dag.anayze().unwrap();
+
+        assert_eq!(&result[&pid("binary")], &crate_info(CrateKind::Normal));
+        assert_eq!(&result[&pid("build_dep")], &crate_info(CrateKind::Build));
+        assert_eq!(&result[&pid("3rd")], &crate_info(CrateKind::Build));
+    }
 }
