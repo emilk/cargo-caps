@@ -3,7 +3,10 @@ members = ["crates/cargo-caps"]
 resolver = "2"
 
 [workspace.package]
+authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/emilk/egui"
 rust-version = "1.89"
 version = "0.0.1"
 

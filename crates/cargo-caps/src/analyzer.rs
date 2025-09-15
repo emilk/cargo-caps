@@ -89,7 +89,7 @@ impl CapsAnalyzer {
         Ok(deduced_caps)
     }
 
-    /// Rerturns true if we did print.
+    /// Returns true if we did print.
     pub fn print_crate_info(
         &self,
         artifact: &Artifact,

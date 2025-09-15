@@ -1,7 +1,17 @@
 [package]
 name = "cargo-caps"
+
+readme = "../../README.md"
+
+categories = ["security"]
+description = "Audit what a crate is capable of by analyzing what linker symbols it emits"
+keywords = ["crates", "capabilities", "security"]
 publish = true
+
+authors.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 

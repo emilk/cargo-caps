@@ -14,11 +14,11 @@ pub type CapabilitySet = BTreeSet<Capability>;
 /// or is suspected of having.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Capability {
-    /// Call [`panic!`]
-    Panic,
-
     /// Allocate memory (`Box::new`, `Vec::new`, …)
     Alloc,
+
+    /// Call [`panic!`]
+    Panic,
 
     /// Read the current time and/or date
     Time,
@@ -45,8 +45,8 @@ pub enum Capability {
 impl std::fmt::Display for Capability {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Panic => write!(f, "panic"),
             Self::Alloc => write!(f, "alloc"),
+            Self::Panic => write!(f, "panic"),
             Self::Time => write!(f, "time"),
             Self::Sysinfo => write!(f, "sysinfo"),
             Self::Stdio => write!(f, "stdio"),
