@@ -1,6 +1,5 @@
-use std::path::Path;
-
 use anyhow::Result;
+use cargo_metadata::camino::Utf8Path;
 
 use crate::{
     symbol::Symbol,
@@ -62,12 +61,16 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions)
     }
 }
 
-pub fn print_symbols(binary_path: &Path, symbols: &[Symbol], options: &PrintOptions) -> Result<()> {
+pub fn print_symbols(
+    binary_path: &Utf8Path,
+    symbols: &[Symbol],
+    options: &PrintOptions,
+) -> Result<()> {
     let depth = options.depth;
 
     if depth == 0 {
         let total_symbols = symbols.len();
-        println!("{}", binary_path.display());
+        println!("{binary_path}");
         println!("└── {total_symbols} total symbols");
         return Ok(());
     }
@@ -76,7 +79,7 @@ pub fn print_symbols(binary_path: &Path, symbols: &[Symbol], options: &PrintOpti
     if true {
         tree = tree.collapse_single_nodes(0, false);
     }
-    let mut display_path = binary_path.display().to_string();
+    let mut display_path = binary_path.to_string();
 
     // Apply filter if specified
     if let Some(filter_path) = &options.filter {
@@ -85,7 +88,7 @@ pub fn print_symbols(binary_path: &Path, symbols: &[Symbol], options: &PrintOpti
             tree = filtered_tree;
             display_path = format!("{display_path}/{filter_path}");
         } else {
-            println!("{}/{}", binary_path.display(), filter_path);
+            println!("{binary_path}/{filter_path}");
             println!("└── (no symbols found)");
             return Ok(());
         }

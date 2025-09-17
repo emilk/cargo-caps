@@ -1,16 +1,16 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io::{BufRead as _, BufReader},
     process::{Command, Stdio},
 };
 
 use anyhow::Context as _;
-use cargo_metadata::{DependencyKind, Message, MetadataCommand, Package, PackageId, TargetKind};
+use cargo_metadata::{Message, Metadata, MetadataCommand, PackageId, diagnostic::DiagnosticLevel};
 use itertools::Itertools as _;
 
 use crate::{
     Capability, CapabilitySet,
-    analyzer::{CapsAnalyzer, CrateInfo, CrateKind},
+    analyzer::{CapsAnalyzer, CrateInfo},
 };
 
 #[derive(clap::Parser)]
@@ -74,7 +74,13 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
 
 impl BuildCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
-        let crate_infos = match self.calc_crate_kinds() {
+        let metadata = self.gather_cargo_metadata()?;
+
+        // TODO: before starting the actual build,
+        // make sure all build.rs files are allow-listed
+        // or we might be in danger!
+
+        let crate_infos = match self.calc_crate_kinds(&metadata) {
             Ok(crate_infos) => Some(crate_infos),
             Err(err) => {
                 eprintln!(
@@ -100,11 +106,48 @@ impl BuildCommand {
 
         for line in reader.lines() {
             let line = line?;
-            if let Ok(message) = serde_json::from_str::<Message>(&line)
-                && let Message::CompilerArtifact(artifact) = message
-            {
-                analyze_artifact(&mut analyzer, crate_infos.as_ref(), verbose, &artifact)
-                    .with_context(|| format!("Name: {}", artifact.target.name))?;
+            if let Ok(message) = serde_json::from_str::<Message>(&line) {
+                match message {
+                    Message::CompilerArtifact(artifact) => {
+                        analyze_artifact(
+                            &metadata,
+                            &mut analyzer,
+                            crate_infos.as_ref(),
+                            verbose,
+                            &artifact,
+                        )
+                        .with_context(|| format!("target name: {}", artifact.target.name))?;
+                    }
+                    Message::CompilerMessage(compiler_message) => {
+                        let show = !matches!(
+                            compiler_message.message.level,
+                            DiagnosticLevel::Warning
+                                | DiagnosticLevel::Note
+                                | DiagnosticLevel::Help
+                        );
+                        if show {
+                            eprintln!("CompilerMessage: {compiler_message}");
+                        }
+                    }
+                    Message::BuildScriptExecuted(build_script) => {
+                        if true {
+                            // TODO: figure out the path of the binary so we can analyze the symbls in it
+                        } else {
+                            eprintln!("BuildScriptExecuted: {build_script:?}");
+                        }
+                    }
+                    Message::BuildFinished(build_finished) => {
+                        if build_finished.success {
+                            eprintln!("Build finished successfully");
+                        } else {
+                            eprintln!("Build failed"); // TODO: return error
+                        }
+                    }
+                    Message::TextLine(text_line) => {
+                        eprintln!("TextLine: {text_line}");
+                    }
+                    _ => {}
+                }
             }
         }
 
@@ -130,15 +173,16 @@ impl BuildCommand {
 
         println!();
         println!(
-            "Run with -v/--verbose to get details about each dependency, or run `cargo-caps caps` with the path to a specific .rlib or binary to learn more about it."
+            "Run with -v/--verbose to get details about each dependency, or run `cargo-caps caps` with the path to a specific binary (executable, .rlib, .dylib, …) to learn more about it."
         );
 
         Ok(())
     }
 
-    fn calc_crate_kinds(&self) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
-        let metadata = self.gather_cargo_metadata()?;
-
+    fn calc_crate_kinds(
+        &self,
+        metadata: &Metadata,
+    ) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
         // Get the package(s) we're interested in
         let target_packages = if let Some(package_name) = &self.package {
             metadata
@@ -151,56 +195,8 @@ impl BuildCommand {
             metadata.workspace_packages()
         };
 
-        if true {
-            let sources = target_packages.iter().map(|p| p.id.clone()).collect_vec();
-            super::graph_analysis::analyze_dependency_graph(&metadata, &sources)
-        } else {
-            let package_map: HashMap<&PackageId, &Package> =
-                metadata.packages.iter().map(|p| (&p.id, p)).collect();
-
-            let mut crate_infos: HashMap<PackageId, CrateInfo> = HashMap::new();
-
-            for package in target_packages {
-                println!("Package: {}", package.name);
-
-                crate_infos.entry(package.id.clone()).or_default(); // Remember all the top targets
-
-                // Collect all transitive dependencies recursively
-                let mut visited = HashSet::new();
-                let mut all_deps = HashMap::new();
-
-                collect_transitive_deps(&package.id, &package_map, &mut visited, &mut all_deps);
-
-                #[expect(clippy::iter_over_hash_type)] // is ok: we sort the results
-                for (pkg_id, dep_kinds) in &all_deps {
-                    if let Some(pkg) = package_map.get(pkg_id) {
-                        // Check if this is a proc-macro
-                        let is_proc_macro = pkg
-                            .targets
-                            .iter()
-                            .any(|t| t.kind.iter().any(|k| k == &TargetKind::ProcMacro));
-
-                        let crate_info = crate_infos.entry(pkg.id.clone()).or_default();
-
-                        if is_proc_macro {
-                            crate_info.kind.insert(CrateKind::ProcMacro);
-                        }
-
-                        for dep_kind in dep_kinds {
-                            let crate_kind = match dep_kind {
-                                DependencyKind::Normal => CrateKind::Normal,
-                                DependencyKind::Development => CrateKind::Dev,
-                                DependencyKind::Build => CrateKind::Build,
-                                DependencyKind::Unknown => CrateKind::Unknown,
-                            };
-                            crate_info.kind.insert(crate_kind);
-                        }
-                    }
-                }
-            }
-
-            Ok(crate_infos)
-        }
+        let sources = target_packages.iter().map(|p| p.id.clone()).collect_vec();
+        crate::build_graph_analysis::analyze_dependency_graph(metadata, &sources)
     }
 
     fn gather_cargo_metadata(&self) -> Result<cargo_metadata::Metadata, anyhow::Error> {
@@ -254,13 +250,21 @@ impl BuildCommand {
 }
 
 fn analyze_artifact(
+    metadata: &Metadata,
     analyzer: &mut CapsAnalyzer,
     crate_infos: Option<&HashMap<PackageId, CrateInfo>>,
     verbose: bool,
     artifact: &cargo_metadata::Artifact,
 ) -> Result<(), anyhow::Error> {
+    let package = metadata
+        .packages
+        .iter()
+        .find(|p| p.id == artifact.package_id)
+        .unwrap(); // TODO
+
     // TODO: all TargetKind?
-    if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib) {
+    // if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib)
+    {
         // let name = &artifact.target.name;
         let crate_info = if let Some(crate_infos) = crate_infos {
             if let Some(crate_info) = crate_infos.get(&artifact.package_id) {
@@ -269,7 +273,7 @@ fn analyze_artifact(
                 // Not sure why we sometimes end up here.
                 // Examples: bitflags block2 objc2 objc2_app_kit
                 // anyhow::bail!("ERROR: unknown crate {name:?}");
-                // eprintln!("ERROR: unknown crate {name:?}"); // TODO: continue, then exit with error
+                eprintln!("ERROR: unknown crate {}", artifact.target.name); // TODO: continue, then exit with error
                 return Ok(());
                 // None
             }
@@ -278,51 +282,32 @@ fn analyze_artifact(
         };
 
         for file_path in &artifact.filenames {
-            if file_path.as_str().ends_with(".rlib") {
-                analyzer.add_crate(artifact, file_path)?;
+            if file_path.as_str().ends_with(".rmeta") {
+                // .rmeta files has all the symbols and function signatures,
+                // without any of the compiled code.
+                // It what makes `cargo check` faster than `cargo build`.
+                // But we cannot parse these files, so we just ignore them
+            } else {
                 let did_print =
-                    analyzer.print_crate_info(artifact, crate_info, file_path, verbose)?;
+                    analyzer.add_artifact(package, artifact, file_path, crate_info, verbose)?;
                 if !did_print {
                     analyzer.num_skipped += 1;
                 }
             }
         }
     }
+    // else if artifact
+    //     .target
+    //     .kind
+    //     .iter()
+    //     .any(|k| k == &TargetKind::CustomBuild)
+    // {
+    //     // build.rs
+    // } else {
+    //     eprintln!(
+    //         "Ignoring artifact {} of kind {:?}",
+    //         artifact.target.name, artifact.target.kind
+    //     );
+    // }
     Ok(())
-}
-
-fn collect_transitive_deps(
-    package_id: &PackageId,
-    package_map: &HashMap<&PackageId, &Package>,
-    visited: &mut HashSet<PackageId>,
-    all_deps: &mut HashMap<PackageId, HashSet<DependencyKind>>,
-) {
-    // Avoid infinite recursion
-    if visited.contains(package_id) {
-        return;
-    }
-    visited.insert(package_id.clone());
-
-    if let Some(package) = package_map.get(package_id) {
-        for dep in &package.dependencies {
-            // Find the actual package for this dependency
-            if let Some(dep_package) = package_map
-                .values()
-                .find(|p| p.name.as_str() == dep.name.as_str())
-            {
-                // Record this dependency with its kind
-                all_deps
-                    .entry(dep_package.id.clone())
-                    .or_default()
-                    .insert(dep.kind);
-
-                // TODO: if this is ONLY a build dependency, we should mark everything below as ONLY build dependency.
-                // We probably need pet-graph for this.
-                collect_transitive_deps(&dep_package.id, package_map, visited, all_deps);
-            } else {
-                // I think we get here for dependencies that are disabled for this feature set
-                // eprintln!("ERROR: failed to find package {:?}", dep.name);
-            }
-        }
-    }
 }

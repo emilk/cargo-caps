@@ -1,10 +1,10 @@
 use std::{
     fs,
     io::{Cursor, Read as _},
-    path::Path,
 };
 
 use anyhow::{Context as _, Result};
+use cargo_metadata::camino::Utf8Path;
 use object::{
     Object as _, ObjectSymbol as _, SymbolKind as ObjectSymbolKind,
     SymbolScope as ObjectSymbolScope,
@@ -16,6 +16,7 @@ use crate::symbol::{Symbol, SymbolKind, SymbolScope};
 
 // TODO: less pub here
 pub mod analyzer;
+mod build_graph_analysis;
 pub mod cap_rule;
 pub mod capability;
 pub mod commands;
@@ -29,10 +30,10 @@ pub mod tree;
 pub use commands::Commands;
 pub use crate_name::CrateName;
 
-/// Extract symbols from an executable or an .rlib.
-pub fn extract_symbols(binary_path: &Path) -> Result<Vec<Symbol>> {
-    let file_bytes = fs::read(binary_path)
-        .with_context(|| format!("Failed to read {}", binary_path.display()))?;
+/// Extract symbols from an binary, e..g an executable, `.dylib`, or an `.rlib`.
+pub fn extract_symbols(binary_path: &Utf8Path) -> Result<Vec<Symbol>> {
+    let file_bytes =
+        fs::read(binary_path).with_context(|| format!("Failed to read {binary_path}"))?;
 
     // Check if it's an ar archive (rlib files are ar archives)
     let is_ar_archive = file_bytes.starts_with(b"!<arch>\n");
@@ -69,7 +70,7 @@ pub fn extract_symbols(binary_path: &Path) -> Result<Vec<Symbol>> {
             }
         }
     } else {
-        // Assume an executable
+        // Assume an executable or dylib
         let file =
             object::File::parse(&*file_bytes).with_context(|| "Failed to parse binary file")?;
         collect_file_symbols(&mut symbols, &file);

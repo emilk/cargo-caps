@@ -14,6 +14,9 @@ pub type CapabilitySet = BTreeSet<Capability>;
 /// or is suspected of having.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Capability {
+    /// This crate has a custom build step (build.rs)
+    BuildRs,
+
     /// Allocate memory (`Box::new`, `Vec::new`, …)
     Alloc,
 
@@ -45,6 +48,7 @@ pub enum Capability {
 impl std::fmt::Display for Capability {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::BuildRs => write!(f, "build.rs"),
             Self::Alloc => write!(f, "alloc"),
             Self::Panic => write!(f, "panic"),
             Self::Time => write!(f, "time"),
@@ -60,17 +64,17 @@ impl std::fmt::Display for Capability {
 
 impl Capability {
     pub fn emoji(&self) -> &'static str {
-        use Capability::{Alloc, Any, FS, Net, Panic, Stdio, Sysinfo, Thread, Time};
         match self {
-            Panic => "❗️",
-            Alloc => "📦",
-            Time => "⏰",
-            Sysinfo => "🖥️ ",
-            Stdio => "📝",
-            Thread => "🧵",
-            Net => "🌐",
-            FS => "📁",
-            Any => "⚠️ ",
+            Self::BuildRs => "🛠️ ",
+            Self::Alloc => "📦",
+            Self::Panic => "❗️",
+            Self::Time => "⏰",
+            Self::Sysinfo => "🖥️ ",
+            Self::Stdio => "📝",
+            Self::Thread => "🧵",
+            Self::Net => "🌐",
+            Self::FS => "📁",
+            Self::Any => "⚠️ ",
         }
     }
 }

@@ -1,9 +1,28 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
-use cargo_metadata::{DependencyKind, Metadata, PackageId};
+use cargo_metadata::{DependencyKind, Metadata, Package, PackageId};
 use petgraph::{Directed, graph::NodeIndex, visit::EdgeRef as _};
 
-use crate::analyzer::{CrateInfo, CrateKind};
+use crate::{
+    CrateName,
+    analyzer::{CrateInfo, CrateKind},
+};
+
+pub fn has_build_rs(package: &Package) -> bool {
+    package
+        .targets
+        .iter()
+        .any(|target| target.is_custom_build())
+}
+
+pub fn build_dependencies(package: &Package) -> Vec<CrateName> {
+    package
+        .dependencies
+        .iter()
+        .filter(|dep| dep.kind == DependencyKind::Build)
+        .map(|dep| CrateName::new(&dep.name).unwrap()) // TODO
+        .collect()
+}
 
 /// A package in the dependency graph.
 #[derive(Debug, Clone)]

@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use cargo_metadata::camino::Utf8PathBuf;
 
 use crate::capability::{Capability, DeducedCapabilities};
 
 #[derive(clap::Parser)]
 pub struct CapsCommand {
     /// Path to the binary file
-    pub binary_path: PathBuf,
+    pub binary_path: Utf8PathBuf,
 
     /// Include local compilation symbols (excluded by default)
     #[arg(long, default_value = "false")]
@@ -23,7 +23,7 @@ pub struct CapsCommand {
 impl CapsCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
         if !self.binary_path.exists() {
-            anyhow::bail!("Binary file does not exist: {}", self.binary_path.display());
+            anyhow::bail!("Binary file does not exist: {}", self.binary_path);
         }
 
         // Extract symbols from the binary
@@ -41,7 +41,7 @@ impl CapsCommand {
     }
 
     fn print_capabilities(&self, capabilities: &DeducedCapabilities) {
-        println!("Capability Analysis for: {}", self.binary_path.display());
+        println!("Capability Analysis for: {}", self.binary_path);
         println!("═══════════════════════════════════════");
 
         if capabilities.own_caps.is_empty() {

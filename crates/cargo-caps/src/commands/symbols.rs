@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use cargo_metadata::camino::Utf8PathBuf;
 
 use crate::print::PrintOptions;
 
 #[derive(clap::Parser)]
 pub struct SymbolCommand {
     /// Paths to the binary files
-    pub binary_paths: Vec<PathBuf>,
+    pub binary_paths: Vec<Utf8PathBuf>,
 
     /// Show symbols at given depth (0=summary only, 1=categories, 2=symbols)
     #[arg(short, long, default_value = "2")]
@@ -51,7 +51,7 @@ impl SymbolCommand {
 
         for (i, binary_path) in self.binary_paths.iter().enumerate() {
             if !binary_path.exists() {
-                anyhow::bail!("Binary file does not exist: {}", binary_path.display());
+                anyhow::bail!("Binary file does not exist: {binary_path}");
             }
 
             // Add separator between multiple files

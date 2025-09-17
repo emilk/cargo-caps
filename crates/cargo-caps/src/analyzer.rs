@@ -1,16 +1,11 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    path::{Path, PathBuf},
-};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::{
     CrateName,
+    build_graph_analysis::has_build_rs,
     capability::{Capability, CapabilitySet, DeducedCapabilities},
 };
-use cargo_metadata::{
-    Artifact,
-    camino::{Utf8Path, Utf8PathBuf},
-};
+use cargo_metadata::{Artifact, Package, TargetKind, camino::Utf8Path};
 use itertools::Itertools as _;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -56,16 +51,35 @@ impl CapsAnalyzer {
         }
     }
 
-    pub fn add_crate(
+    /// NOTE: each crate can have multiple artifacts, e.g. both a `custom-build` (build.rs)
+    /// and a library.
+    ///
+    /// Returns `true` if we printed anything
+    pub fn add_artifact(
         &mut self,
+        package: &Package,
         artifact: &Artifact,
-        bin_path: &Utf8PathBuf,
-    ) -> anyhow::Result<DeducedCapabilities> {
-        let target = &artifact.target;
-        let crate_name = CrateName::new(&target.name)?;
-        let bin_path = PathBuf::from(bin_path.as_str()); // TODO: use camino everywhere
+        bin_path: &Utf8Path,
+        crate_info: Option<&CrateInfo>,
+        verbose: bool,
+    ) -> anyhow::Result<bool> {
+        let crate_name = CrateName::new(package.name.to_string())?;
 
-        let mut deduced_caps = deduce_caps_of_binary(&bin_path)?;
+        let mut deduced_caps = deduce_caps_of_binary(bin_path)?;
+
+        if has_build_rs(package) {
+            deduced_caps
+                .own_caps
+                .entry(Capability::BuildRs)
+                .or_default();
+        }
+
+        for kind in &artifact.target.kind {
+            if kind != &TargetKind::Lib {
+                eprintln!("{crate_name} kind: {kind}");
+                return Ok(false); // TODO: add support for custom-build build.rs files
+            }
+        }
 
         deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
 
@@ -83,23 +97,11 @@ impl CapsAnalyzer {
             }
         }
 
-        self.crate_caps
+        let prev = self
+            .crate_caps
             .insert(crate_name.clone(), deduced_caps.clone());
 
-        Ok(deduced_caps)
-    }
-
-    /// Returns true if we did print.
-    pub fn print_crate_info(
-        &self,
-        artifact: &Artifact,
-        crate_info: Option<&CrateInfo>,
-        bin_path: &Utf8PathBuf,
-        verbose: bool,
-    ) -> anyhow::Result<bool> {
-        let target = &artifact.target;
-        let crate_name = CrateName::new(&target.name)?;
-        let deduced_caps = &self.crate_caps[&crate_name];
+        debug_assert!(prev.is_none(), "Added {crate_name} twice");
 
         let crate_kind_suffix = {
             if let Some(crate_info) = crate_info {
@@ -149,7 +151,7 @@ impl CapsAnalyzer {
             } else {
                 let cap_names: String = crate_deps
                     .iter()
-                    .map(|c| format!("{}{c:?}", c.emoji()))
+                    .map(|cap| format!("{}{cap}", cap.emoji()))
                     .join(", ");
                 format!("{cap_names} because of dependencies")
             }
@@ -202,7 +204,7 @@ impl CapsAnalyzer {
             } else {
                 let cap_names: Vec<String> = filtered_caps
                     .iter()
-                    .map(|c| format!("{}{c:?}", c.emoji()))
+                    .map(|cap| format!("{}{cap}", cap.emoji()))
                     .collect();
                 cap_names.join(", ")
             }
@@ -261,7 +263,7 @@ fn filter_capabilities(
         .collect()
 }
 
-fn deduce_caps_of_binary(path: &Path) -> anyhow::Result<DeducedCapabilities> {
+fn deduce_caps_of_binary(path: &Utf8Path) -> anyhow::Result<DeducedCapabilities> {
     let symbols = crate::extract_symbols(path)?;
     let filtered_symbols = crate::filter_symbols(symbols, false, false);
     DeducedCapabilities::from_symbols(filtered_symbols)
