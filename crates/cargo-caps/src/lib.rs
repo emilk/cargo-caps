@@ -23,6 +23,7 @@ pub mod commands;
 mod crate_name;
 pub mod demangle;
 pub mod print;
+mod reservoir_sample;
 pub mod rust_path;
 pub mod symbol;
 pub mod tree;

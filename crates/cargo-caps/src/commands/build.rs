@@ -63,7 +63,7 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
                 "any" => Some(Capability::Any),
                 _ => {
                     if !s.is_empty() {
-                        eprintln!("Warning: unknown capability '{s}' in ignored-caps"); // TODO: error
+                        println!("Warning: unknown capability '{s}' in ignored-caps"); // TODO: error
                     }
                     None
                 }
@@ -83,10 +83,10 @@ impl BuildCommand {
         let crate_infos = match self.calc_crate_kinds(&metadata) {
             Ok(crate_infos) => Some(crate_infos),
             Err(err) => {
-                eprintln!(
+                println!(
                     "Failed to analyze crate graph. cargo-deps won't understand if a dependency is a build-dependency, a dev-dependency, etc. Error: {err}"
                 );
-                eprintln!();
+                println!();
                 None
             }
         };
@@ -126,25 +126,25 @@ impl BuildCommand {
                                 | DiagnosticLevel::Help
                         );
                         if show {
-                            eprintln!("CompilerMessage: {compiler_message}");
+                            println!("CompilerMessage: {compiler_message}");
                         }
                     }
                     Message::BuildScriptExecuted(build_script) => {
                         if true {
                             // TODO: figure out the path of the binary so we can analyze the symbls in it
                         } else {
-                            eprintln!("BuildScriptExecuted: {build_script:?}");
+                            println!("BuildScriptExecuted: {build_script:?}");
                         }
                     }
                     Message::BuildFinished(build_finished) => {
                         if build_finished.success {
-                            eprintln!("Build finished successfully");
+                            println!("Build finished successfully");
                         } else {
-                            eprintln!("Build failed"); // TODO: return error
+                            println!("Build failed"); // TODO: return error
                         }
                     }
                     Message::TextLine(text_line) => {
-                        eprintln!("TextLine: {text_line}");
+                        println!("TextLine: {text_line}");
                     }
                     _ => {}
                 }
@@ -273,7 +273,7 @@ fn analyze_artifact(
                 // Not sure why we sometimes end up here.
                 // Examples: bitflags block2 objc2 objc2_app_kit
                 // anyhow::bail!("ERROR: unknown crate {name:?}");
-                eprintln!("ERROR: unknown crate {}", artifact.target.name); // TODO: continue, then exit with error
+                println!("ERROR: unknown crate {}", artifact.target.name); // TODO: continue, then exit with error
                 return Ok(());
                 // None
             }
@@ -304,7 +304,7 @@ fn analyze_artifact(
     // {
     //     // build.rs
     // } else {
-    //     eprintln!(
+    //     println!(
     //         "Ignoring artifact {} of kind {:?}",
     //         artifact.target.name, artifact.target.kind
     //     );

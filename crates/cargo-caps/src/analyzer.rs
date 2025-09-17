@@ -1,9 +1,10 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::{
     CrateName,
     build_graph_analysis::has_build_rs,
     capability::{Capability, CapabilitySet, DeducedCapabilities},
+    reservoir_sample::ReservoirSampleExt,
 };
 use cargo_metadata::{Artifact, Package, TargetKind, camino::Utf8Path};
 use itertools::Itertools as _;
@@ -35,7 +36,7 @@ pub struct CrateInfo {
 }
 
 pub struct CapsAnalyzer {
-    crate_caps: HashMap<CrateName, DeducedCapabilities>,
+    crate_caps: HashMap<CrateName, BTreeMap<TargetKind, DeducedCapabilities>>,
     ignored_caps: CapabilitySet,
     show_empty: bool,
     pub num_skipped: usize,
@@ -67,51 +68,63 @@ impl CapsAnalyzer {
 
         let mut deduced_caps = deduce_caps_of_binary(bin_path)?;
 
-        if has_build_rs(package) {
-            deduced_caps
-                .own_caps
-                .entry(Capability::BuildRs)
-                .or_default();
-        }
-
-        for kind in &artifact.target.kind {
-            if kind != &TargetKind::Lib {
-                eprintln!("{crate_name} kind: {kind}");
-                return Ok(false); // TODO: add support for custom-build build.rs files
-            }
-        }
+        debug_assert_eq!(
+            artifact.target.kind.len(),
+            1,
+            "Expected a single, kind, got {:?}",
+            artifact.target.kind
+        );
+        let artifact_kind = &artifact.target.kind[0];
 
         deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
 
         for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
-            if let Some(dep_caps) = self.crate_caps.get(&dep_crate_name) {
-                deduced_caps
-                    .known_crates
-                    .entry(dep_crate_name)
-                    .or_default()
-                    .extend(dep_caps.total_capabilities());
+            if let Some(crate_caps) = self.crate_caps.get(&dep_crate_name) {
+                if let Some(dep_caps) = crate_caps.get(&TargetKind::Lib) {
+                    deduced_caps
+                        .known_crates
+                        .entry(dep_crate_name)
+                        .or_default()
+                        .extend(dep_caps.total_capabilities());
+                } else {
+                    // TODO: return error?
+                    println!(
+                        "Failed to find TargetKind::Lib for dependency '{dep_crate_name}'; found: {:?}",
+                        crate_caps.keys()
+                    );
+                }
             } else {
                 // We depend on a crate that produced no build artifact.
                 // It means it has no symbols of itself, and all references to it
                 // are really references to this library.
+                // println!("MISSING DEPENDENCY: '{dep_crate_name}'");
             }
         }
 
-        let prev = self
-            .crate_caps
-            .insert(crate_name.clone(), deduced_caps.clone());
+        {
+            let crate_caps = self.crate_caps.entry(crate_name.clone()).or_default();
 
-        debug_assert!(prev.is_none(), "Added {crate_name} twice");
+            for kind in &artifact.target.kind {
+                let prev = crate_caps.insert(kind.clone(), deduced_caps.clone());
+                debug_assert!(prev.is_none(), "Added {crate_name} {kind} twice");
+            }
+        }
 
         let crate_kind_suffix = {
-            if let Some(crate_info) = crate_info {
+            if artifact.target.kind.contains(&TargetKind::CustomBuild) {
+                " (build.rs)".to_owned()
+            } else if artifact.target.kind.contains(&TargetKind::ProcMacro) {
+                " (proc-macro)".to_owned()
+            } else if let Some(crate_info) = crate_info {
                 if crate_info.kind.contains(&CrateKind::Normal) {
                     String::new() // Not worth mentioning
                 } else {
                     format!(" ({})", crate_info.kind.iter().join(", "))
                 }
+            } else if artifact.target.kind.contains(&TargetKind::Lib) {
+                String::new() // Not worth mentioning
             } else {
-                String::new()
+                format!(" ({})", artifact.target.kind.iter().join(", "))
             }
         };
 
@@ -119,7 +132,8 @@ impl CapsAnalyzer {
             let symbol_names: Vec<String> = deduced_caps
                 .unknown_symbols
                 .iter()
-                .take(3)
+                .reservoir_sample(3, &mut rand::rng())
+                .iter()
                 .map(|s| s.format(false))
                 .collect();
             let symbol_text = if deduced_caps.unknown_symbols.len() > 3 {
@@ -160,7 +174,7 @@ impl CapsAnalyzer {
             let mut info = format!("{}Any because of", Capability::Any.emoji());
             // TODO: pick a random reasons instead of the first N
             let max_width = 60;
-            for symbol in reasons {
+            for symbol in reasons.iter().reservoir_sample(5, &mut rand::rng()) {
                 if info.len() < max_width {
                     info += &format!(" {}", symbol.format(false));
                 } else {
@@ -212,6 +226,7 @@ impl CapsAnalyzer {
 
         println!("{crate_name}{crate_kind_suffix}: {info}");
         if verbose {
+            println!("  source: {}", artifact.target.src_path);
             println!("  path: {}", as_relative_path(bin_path));
 
             let features = &artifact.features;
@@ -221,8 +236,24 @@ impl CapsAnalyzer {
                 println!("  features: {}", features.join(", "));
             }
 
+            println!("  Artifact kind: {artifact_kind}");
             if let Some(crate_info) = crate_info {
-                println!("Kind: {}", crate_info.kind.iter().join(", "));
+                println!("  Crate kind: {}", crate_info.kind.iter().join(", "));
+            }
+
+            if artifact_kind != &TargetKind::CustomBuild && has_build_rs(package) {
+                let build_rs_caps = self
+                    .crate_caps
+                    .get(&crate_name)
+                    .and_then(|crate_caps| crate_caps.get(&TargetKind::CustomBuild));
+                if let Some(build_rs_caps) = build_rs_caps {
+                    println!(
+                        "  {crate_name} build.rs hcapabilities: {}",
+                        build_rs_caps.total_capabilities().iter().join(", ")
+                    );
+                } else {
+                    println!("  Missing capabilities for build.rs of {crate_name}");
+                }
             }
 
             println!();

@@ -65,7 +65,7 @@ impl SymbolCommand {
                 crate::filter_symbols(symbols, self.include_local, self.include_all_kinds);
 
             if self.show_metadata && filtered_symbols.len() < original_count {
-                eprintln!(
+                println!(
                     "Filtered {} -> {} symbols (use --include-local and/or --include-all-kinds to show more)",
                     original_count,
                     filtered_symbols.len()

@@ -64,7 +64,6 @@ TODO: consider splitting out `unknown` and `any`.
 
 ## Capabilities
 `cargo-caps` currently can distinguish between the following capabilities:
-- `build.rs` - the crate has a custom build step in the form of a `build.rs` binary
 - `alloc` - allocate memory (applied to everything in `std`)
 - `panic` - can cause a `panic!` (applied to everything in `std`)
 - `time` - measuring time and telling current time

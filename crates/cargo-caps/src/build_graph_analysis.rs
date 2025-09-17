@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
-use cargo_metadata::{DependencyKind, Metadata, Package, PackageId};
+use cargo_metadata::{DependencyKind, Metadata, Package, PackageId, TargetKind};
 use petgraph::{Directed, graph::NodeIndex, visit::EdgeRef as _};
 
 use crate::{
@@ -126,15 +126,24 @@ impl DepGraph {
                 {
                     // Create edge with dependency kind
                     let mut edge_kind = BTreeSet::new();
-                    edge_kind.insert(match dep.kind {
-                        DependencyKind::Normal => CrateKind::Normal,
-                        DependencyKind::Build => CrateKind::Build,
-                        DependencyKind::Development => CrateKind::Dev,
-                        DependencyKind::Unknown => CrateKind::Unknown,
-                    });
+
+                    if dep_package
+                        .targets
+                        .iter()
+                        .all(|t| t.kind.iter().all(|k| k == &TargetKind::ProcMacro))
+                    {
+                        edge_kind.insert(CrateKind::ProcMacro);
+                    } else {
+                        edge_kind.insert(match dep.kind {
+                            DependencyKind::Normal => CrateKind::Normal,
+                            DependencyKind::Build => CrateKind::Build,
+                            DependencyKind::Development => CrateKind::Dev,
+                            DependencyKind::Unknown => CrateKind::Unknown,
+                        });
+                    }
 
                     if edge_kind.is_empty() {
-                        eprintln!("WARNING: dependency edge has no kind");
+                        println!("WARNING: dependency edge has no kind");
                     }
 
                     let edge = Edge { kind: edge_kind };
@@ -230,19 +239,23 @@ fn dependency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTr
     for &dep_kind in &edge.kind {
         for &crate_kind in &dependent.kind {
             let new_kind = match (dep_kind, crate_kind) {
-                // Build and Dev dependencies always propagate their kind
+                // All dependencies ON proc-macros are marked proc-macros:
+                (_, CrateKind::ProcMacro) => CrateKind::ProcMacro,
+
+                // A normal dependency inherits dependent's kind:
+                (CrateKind::Normal, crate_kind) => crate_kind,
+
+                // All dependencies of a build-dependency are marked build-dependenices:
                 (CrateKind::Build, _) => CrateKind::Build,
+
+                // All dependencies of a dev-dependency are marked dev-dependenices:
                 (CrateKind::Dev, _) => CrateKind::Dev,
 
-                // Normal dependency relationships
-                (CrateKind::Normal, CrateKind::Normal) => CrateKind::Normal,
-                (CrateKind::Normal, crate_kind) => crate_kind, // normal dependency of build/dev/proc-macro crate inherits dependent's kind
+                // All dependencies of a proc-macros are marked proc-macros:
+                (CrateKind::ProcMacro, _) => CrateKind::ProcMacro,
 
-                // If dependent is Unknown, dependency keeps its kind
-                (dep_kind, CrateKind::Unknown) => dep_kind,
-
-                // Unknown and ProcMacro inherit behavior
-                (CrateKind::Unknown | CrateKind::ProcMacro, crate_kind) => crate_kind, // inherit dependent's kind
+                // Unknown is viral:
+                (_, CrateKind::Unknown) | (CrateKind::Unknown, _) => CrateKind::Unknown,
             };
             final_set.insert(new_kind);
         }
@@ -285,5 +298,65 @@ mod tests {
         assert_eq!(&result[&pid("binary")], &crate_info(CrateKind::Normal));
         assert_eq!(&result[&pid("build_dep")], &crate_info(CrateKind::Build));
         assert_eq!(&result[&pid("3rd")], &crate_info(CrateKind::Build));
+    }
+
+    #[test]
+    fn test_proc_macro() {
+        let mut graph = DepGraph::default();
+        graph.insert_node(&pid("binary"), CrateKind::Normal);
+        graph.insert_node(&pid("clap_derive"), CrateKind::ProcMacro);
+        // graph.insert_node(&pid("proc-macro2"), CrateKind::Normal);
+        graph.add_edge(
+            pid("binary"),
+            pid("clap_derive"),
+            Edge::from(CrateKind::Normal),
+        );
+        graph.add_edge(
+            pid("clap_derive"),
+            pid("proc-macro2"),
+            Edge::from(CrateKind::Normal),
+        );
+
+        let result = graph.analyze();
+
+        assert_eq!(&result[&pid("binary")], &crate_info(CrateKind::Normal));
+        assert_eq!(
+            &result[&pid("clap_derive")],
+            &crate_info(CrateKind::ProcMacro)
+        );
+        assert_eq!(
+            &result[&pid("proc-macro2")],
+            &crate_info(CrateKind::ProcMacro)
+        );
+    }
+
+    #[test]
+    fn test_proc_macro2() {
+        let mut graph = DepGraph::default();
+        graph.insert_node(&pid("binary"), CrateKind::Normal);
+        // graph.insert_node(&pid("clap_derive"), CrateKind::Normal);
+        // graph.insert_node(&pid("proc-macro2"), CrateKind::Normal);
+        graph.add_edge(
+            pid("binary"),
+            pid("clap_derive"),
+            Edge::from(CrateKind::ProcMacro),
+        );
+        graph.add_edge(
+            pid("clap_derive"),
+            pid("proc-macro2"),
+            Edge::from(CrateKind::Normal),
+        );
+
+        let result = graph.analyze();
+
+        assert_eq!(&result[&pid("binary")], &crate_info(CrateKind::Normal));
+        assert_eq!(
+            &result[&pid("clap_derive")],
+            &crate_info(CrateKind::ProcMacro)
+        );
+        assert_eq!(
+            &result[&pid("proc-macro2")],
+            &crate_info(CrateKind::ProcMacro)
+        );
     }
 }

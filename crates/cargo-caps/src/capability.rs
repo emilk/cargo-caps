@@ -14,9 +14,6 @@ pub type CapabilitySet = BTreeSet<Capability>;
 /// or is suspected of having.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Capability {
-    /// This crate has a custom build step (build.rs)
-    BuildRs,
-
     /// Allocate memory (`Box::new`, `Vec::new`, …)
     Alloc,
 
@@ -48,7 +45,6 @@ pub enum Capability {
 impl std::fmt::Display for Capability {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BuildRs => write!(f, "build.rs"),
             Self::Alloc => write!(f, "alloc"),
             Self::Panic => write!(f, "panic"),
             Self::Time => write!(f, "time"),
@@ -65,7 +61,6 @@ impl std::fmt::Display for Capability {
 impl Capability {
     pub fn emoji(&self) -> &'static str {
         match self {
-            Self::BuildRs => "🛠️ ",
             Self::Alloc => "📦",
             Self::Panic => "❗️",
             Self::Time => "⏰",
@@ -79,7 +74,7 @@ impl Capability {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DeducedCapabilities {
     /// The known capabilities of this crate
     pub own_caps: BTreeMap<Capability, Reasons>,
@@ -144,6 +139,10 @@ impl DeducedCapabilities {
         }
         if !unknown_symbols.is_empty() || !unknown_crates.is_empty() {
             total.insert(Capability::Any);
+        }
+
+        if total.contains(&Capability::Any) {
+            return std::iter::once(Capability::Any).collect();
         }
 
         total

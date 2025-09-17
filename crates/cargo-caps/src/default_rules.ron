@@ -7,7 +7,7 @@
             // Curiously, they only show up in optimized builds.
             "anon.*",
 
-            // NOTE: cargo-caps ignored leading underscores
+            // NOTE: cargo-caps ignores leading underscores
 
             // Simple memory stuff:
             ".memset_pattern.*",
@@ -21,8 +21,9 @@
             "strcpy",
             "strlen",
 
-            "std::sys::pal::unix::os::errno",
+            "abort",
             "error",
+            "std::sys::pal::unix::os::errno",
 
             // Math:
             "acos",
@@ -72,6 +73,7 @@
             "close", // Closing a FILE is fine
 
             // Thread Local Variable
+            "tlv_atexit",
             "tlv_bootstrap",
 
             "divt*",
@@ -81,21 +83,43 @@
             "udiv*", // unsigned div
             "umod*", // unsigned modulus
 
+            "dispatch_semaphore_*",
+
             "Unwind_Resume", // Rust exception handling
             "rust_eh_personality", // Rust exception handling
             "rust_no_alloc_shim_is_unstable*",
+
+            "CCRandomGenerateBytes",
+            "getentropy",
+
+            "rustc_proc_macro_decls_*",
         ],
     ),
     (
         caps: [ Sysinfo ],
         patterns: [
-            "isatty"
+            "getcwd",
+            "getenv",
+            "isatty",
+            "NSGetArgc",
+            "NSGetArgv",
+            "NSGetEnviron",
         ],
     ),
     (
         caps: [ Time ],
         patterns: [
             "gettimeofday"
+        ],
+    ),
+    (
+        caps: [
+            FS,
+        ],
+        patterns: [
+            "dirfd",
+            "fstat",
+            "mmap",
         ],
     ),
     (
@@ -110,10 +134,13 @@
             Alloc,
         ],
         patterns: [
+            "calloc",
+            "malloc",
             "rdl_alloc_zeroed",
             "rdl_alloc",
             "rdl_dealloc",
             "rdl_realloc",
+            "realloc",
             "rg_oom",
             "rust_alloc_error_handler",
             "rust_alloc_zeroed",
@@ -127,13 +154,14 @@
             Panic,
         ],
         patterns: [
+            "core::panicking::*",
             "rust_begin_unwind",
             "rust_drop_panic",
             "rust_foreign_exception",
             "rust_panic_cleanup",
             "rust_panic",
             "rust_start_panic",
-            "core::panicking::*",
+            "Unwind_*",
         ],
     ),
     (
