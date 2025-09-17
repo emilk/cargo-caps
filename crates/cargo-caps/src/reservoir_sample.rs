@@ -13,7 +13,9 @@ where
     let mut iter = iter.into_iter().enumerate();
 
     // Fill the reservoir with the first n items
-    for (_, item) in iter.by_ref().take(n) {
+    while reservoir.len() < n
+        && let Some((_, item)) = iter.next()
+    {
         reservoir.push(item);
     }
 
@@ -31,11 +33,19 @@ where
 /// Iterator extension trait for convenient reservoir sampling
 pub trait ReservoirSampleExt: Iterator {
     /// Take a reservoir sample of N items from this iterator
-    fn reservoir_sample<R: Rng + ?Sized>(self, n: usize, rng: &mut R) -> Vec<Self::Item>
+    fn reservoir_sample_with<R: Rng + ?Sized>(self, n: usize, rng: &mut R) -> Vec<Self::Item>
     where
         Self: Sized,
     {
         reservoir_sample(self, n, rng)
+    }
+
+    /// Take a reservoir sample of N items from this iterator
+    fn reservoir_sample(self, n: usize) -> Vec<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.reservoir_sample_with(n, &mut rand::rng())
     }
 }
 

@@ -37,7 +37,10 @@ pub struct BuildCommand {
     pub quiet: bool,
 
     /// Capabilities to ignore when displaying results (comma-separated, lowercase)
-    #[arg(long = "ignored-caps", default_value = "alloc,stdio,time,panic")]
+    #[arg(
+        long = "ignored-caps",
+        default_value = "build.rs,alloc,stdio,time,panic"
+    )]
     pub ignored_caps: String,
 
     /// Show crates with no capabilities after filtering
@@ -52,8 +55,9 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
         .filter_map(|s| {
             let s = s.trim().to_lowercase();
             match s.as_str() {
-                "panic" => Some(Capability::Panic),
+                "build.rs" => Some(Capability::BuildRs),
                 "alloc" => Some(Capability::Alloc),
+                "panic" => Some(Capability::Panic),
                 "time" => Some(Capability::Time),
                 "sysinfo" => Some(Capability::Sysinfo),
                 "stdio" => Some(Capability::Stdio),
@@ -153,18 +157,18 @@ impl BuildCommand {
 
         child.wait()?;
 
-        if 0 < analyzer.num_skipped {
+        if 0 < analyzer.num_skipped_artifacts {
             println!();
 
             if ignored_caps.is_empty() {
                 println!(
-                    "Skipped printing {} crate(s) that had zero capabilities",
-                    analyzer.num_skipped
+                    "Skipped printing {} artifact(s) that had zero capabilities",
+                    analyzer.num_skipped_artifacts
                 );
             } else {
                 println!(
-                    "Skipped printing {} crate(s) that only had the following capabilities (or less): {}",
-                    analyzer.num_skipped,
+                    "Skipped printing {} artifact(s) that only had the following capabilities (or less): {}",
+                    analyzer.num_skipped_artifacts,
                     ignored_caps.iter().join(", ")
                 );
             }
@@ -262,52 +266,42 @@ fn analyze_artifact(
         .find(|p| p.id == artifact.package_id)
         .unwrap(); // TODO
 
-    // TODO: all TargetKind?
-    // if artifact.target.kind.iter().any(|k| k == &TargetKind::Lib)
-    {
-        // let name = &artifact.target.name;
-        let crate_info = if let Some(crate_infos) = crate_infos {
-            if let Some(crate_info) = crate_infos.get(&artifact.package_id) {
-                Some(crate_info)
-            } else {
-                // Not sure why we sometimes end up here.
-                // Examples: bitflags block2 objc2 objc2_app_kit
-                // anyhow::bail!("ERROR: unknown crate {name:?}");
-                println!("ERROR: unknown crate {}", artifact.target.name); // TODO: continue, then exit with error
-                return Ok(());
-                // None
+    let crate_info = if let Some(crate_infos) = crate_infos {
+        if let Some(crate_info) = crate_infos.get(&artifact.package_id) {
+            if !crate_info
+                .kind
+                .contains(&crate::analyzer::CrateKind::Normal)
+            {
+                return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
             }
-        } else {
-            None
-        };
 
-        for file_path in &artifact.filenames {
-            if file_path.as_str().ends_with(".rmeta") {
-                // .rmeta files has all the symbols and function signatures,
-                // without any of the compiled code.
-                // It what makes `cargo check` faster than `cargo build`.
-                // But we cannot parse these files, so we just ignore them
-            } else {
-                let did_print =
-                    analyzer.add_artifact(package, artifact, file_path, crate_info, verbose)?;
-                if !did_print {
-                    analyzer.num_skipped += 1;
-                }
+            Some(crate_info)
+        } else {
+            // Not sure why we sometimes end up here.
+            // Examples: bitflags block2 objc2 objc2_app_kit
+            // anyhow::bail!("ERROR: unknown crate {name:?}");
+            println!("ERROR: unknown crate {}", artifact.target.name); // TODO: continue, then exit with error
+            return Ok(());
+            // None
+        }
+    } else {
+        None
+    };
+
+    for file_path in &artifact.filenames {
+        if file_path.as_str().ends_with(".rmeta") {
+            // .rmeta files has all the symbols and function signatures,
+            // without any of the compiled code.
+            // It what makes `cargo check` faster than `cargo build`.
+            // But we cannot parse these files, so we just ignore them
+        } else {
+            let did_print =
+                analyzer.add_artifact(package, artifact, file_path, crate_info, verbose)?;
+            if !did_print {
+                analyzer.num_skipped_artifacts += 1;
             }
         }
     }
-    // else if artifact
-    //     .target
-    //     .kind
-    //     .iter()
-    //     .any(|k| k == &TargetKind::CustomBuild)
-    // {
-    //     // build.rs
-    // } else {
-    //     println!(
-    //         "Ignoring artifact {} of kind {:?}",
-    //         artifact.target.name, artifact.target.kind
-    //     );
-    // }
+
     Ok(())
 }

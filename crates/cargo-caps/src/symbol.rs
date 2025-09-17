@@ -255,7 +255,13 @@ impl TypeName {
 
                 match c {
                     b'<' => caret_depth += 1,
-                    b'>' => caret_depth -= 1,
+                    b'>' => {
+                        if 0 < i && symbol.as_bytes()[i - 1] == b'-' {
+                            // ignore '->'
+                        } else {
+                            caret_depth -= 1;
+                        }
+                    }
                     _ => {}
                 }
 
@@ -281,12 +287,11 @@ impl TypeName {
                             });
                         }
                     } else {
-                        // Example: "<dyn core::any::Any>"
-                        assert_eq!(
-                            i + 1,
-                            symbol.len(),
-                            "Unexpected characters after closing bracket"
+                        anyhow::ensure!(
+                            i + 1 == symbol.len(),
+                            "Unexpected characters after closing bracket when parsing {symbol:?}"
                         );
+                        // Example: "<dyn core::any::Any>"
                         return Ok(Self::RustPath(RustPath::new(strip_indirections(
                             &symbol[1..i],
                         ))));
@@ -400,7 +405,6 @@ impl fmt::Display for TraitFnImpl {
 
 impl TraitFnImpl {
     pub fn parse(symbol: &str) -> anyhow::Result<Self> {
-        let symbol = symbol.replace("..", "::");
         // dbg!(&symbol);
 
         // Find last ">::`:
@@ -513,4 +517,13 @@ fn test_paths() {
             "parking_lot::raw_rwlock::RawRwLock::lock_shared_slow"
         ))]
     );
+}
+
+#[test]
+fn test_complex_function() {
+    let parsed = TraitFnImpl::parse(
+        r#"<extern "" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#,
+    );
+    assert!(parsed.is_ok(), "{}", parsed.unwrap_err());
+    panic!("Parsed: {parsed:?}");
 }

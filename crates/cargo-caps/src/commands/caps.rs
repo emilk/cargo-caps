@@ -1,6 +1,9 @@
 use cargo_metadata::camino::Utf8PathBuf;
 
-use crate::capability::{Capability, DeducedCapabilities};
+use crate::{
+    capability::{Capability, DeducedCapabilities},
+    reservoir_sample::ReservoirSampleExt as _,
+};
 
 #[derive(clap::Parser)]
 pub struct CapsCommand {
@@ -56,7 +59,7 @@ impl CapsCommand {
 
                 if (self.verbose || *capability == Capability::Any) && !reasons.is_empty() {
                     println!("    Reasons ({} symbols):", reasons.len());
-                    for symbol in reasons.iter().take(5) {
+                    for symbol in reasons.iter().reservoir_sample(5) {
                         println!("      • {}", symbol.format(false));
                     }
                     if reasons.len() > 5 {

@@ -24,6 +24,7 @@
             "abort",
             "error",
             "std::sys::pal::unix::os::errno",
+            "strerror_r",
 
             // Math:
             "acos",
@@ -101,6 +102,7 @@
             "getcwd",
             "getenv",
             "isatty",
+            "mach_task_self_", // Access to own PID
             "NSGetArgc",
             "NSGetArgv",
             "NSGetEnviron",
@@ -135,6 +137,7 @@
         ],
         patterns: [
             "calloc",
+            "free",
             "malloc",
             "rdl_alloc_zeroed",
             "rdl_alloc",
@@ -255,6 +258,7 @@
             "std::os::fd::owned::BorrowedFd::borrow_raw",
             "std::sys::io::io_slice::*",
             "std::sys::pal::unix::stdio::*",
+            "std::sys::stdio::*",
         ],
     ),
     (

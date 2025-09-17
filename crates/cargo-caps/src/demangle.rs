@@ -23,20 +23,29 @@ pub fn demangle_symbol(name: &str) -> String {
 }
 
 fn decode_rust_type(encoded: &str) -> String {
-    encoded
+    // TODO: make this better
+    let encoded = encoded
         .replace("$BP$", "*")
-        .replace("$RF$", "&")
+        .replace("$C$", ",")
+        .replace("$GT$", ">")
         .replace("$LP$", "(")
+        .replace("$LT,GT$", "<>")
+        .replace("$LT$", "<")
+        .replace("$RF$", "&")
         .replace("$RP$", ")")
+        .replace("$u20$", " ")
+        .replace("$u22,u22$", "\"\"")
+        .replace("$u22$", "\"")
+        .replace("$u2b$", "+")
+        .replace("$u3b$", ";")
+        .replace("$u3d$", "=")
         .replace("$u5b$", "[")
         .replace("$u5d$", "]")
-        .replace("$u20$", " ")
-        .replace("$u3b$", ";")
         .replace("$u7b$", "{")
-        .replace("$u7d$", "}")
-        .replace("$LT$", "<")
-        .replace("$GT$", ">")
-        .replace("$C$", ",")
+        .replace("$u7d$", "}");
+
+    // Second round:
+    encoded.replace(" .> ", " -> ").replace("..", "::")
 }
 
 /// Try to manually demangle Itanium ABI symbols that standard demanglers can't handle
@@ -147,5 +156,15 @@ mod tests {
         assert_eq!(decode_rust_type("$u3b$test$u20$space"), ";test space");
         assert_eq!(decode_rust_type("$LT$T$GT$"), "<T>");
         assert_eq!(decode_rust_type("normal_text"), "normal_text");
+    }
+
+    #[test]
+    fn test_demangle() {
+        assert_eq!(
+            demangle_symbol(
+                "__ZN135_$LT$extern$u20$$u22$C$u22$$u20$fn$LP$$RF$T$C$objc..runtime..Sel$RP$$u20$.$GT$$u20$R$u20$as$u20$objc..declare..MethodImplementation$GT$3imp17h8f6f1e820e818e51E"
+            ),
+            r#"<extern "" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#
+        );
     }
 }

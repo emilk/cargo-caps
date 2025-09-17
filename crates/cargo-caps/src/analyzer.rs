@@ -4,7 +4,7 @@ use crate::{
     CrateName,
     build_graph_analysis::has_build_rs,
     capability::{Capability, CapabilitySet, DeducedCapabilities},
-    reservoir_sample::ReservoirSampleExt,
+    reservoir_sample::ReservoirSampleExt as _,
 };
 use cargo_metadata::{Artifact, Package, TargetKind, camino::Utf8Path};
 use itertools::Itertools as _;
@@ -39,7 +39,7 @@ pub struct CapsAnalyzer {
     crate_caps: HashMap<CrateName, BTreeMap<TargetKind, DeducedCapabilities>>,
     ignored_caps: CapabilitySet,
     show_empty: bool,
-    pub num_skipped: usize,
+    pub num_skipped_artifacts: usize,
 }
 
 impl CapsAnalyzer {
@@ -48,7 +48,7 @@ impl CapsAnalyzer {
             crate_caps: HashMap::new(),
             ignored_caps,
             show_empty,
-            num_skipped: 0,
+            num_skipped_artifacts: 0,
         }
     }
 
@@ -76,6 +76,16 @@ impl CapsAnalyzer {
         );
         let artifact_kind = &artifact.target.kind[0];
 
+        if matches!(
+            artifact_kind,
+            &TargetKind::CustomBuild | &TargetKind::ProcMacro
+        ) {
+            // build.rs files and proc-macros are binaries with a main function and evertyhing.
+            // There is very little they can't do.
+            // So they will always be sus
+            return Ok(false);
+        }
+
         deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
 
         for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
@@ -89,7 +99,7 @@ impl CapsAnalyzer {
                 } else {
                     // TODO: return error?
                     println!(
-                        "Failed to find TargetKind::Lib for dependency '{dep_crate_name}'; found: {:?}",
+                        "{crate_name} depends on '{dep_crate_name}', but we have no Lib capabilities stored for it, only {:?}",
                         crate_caps.keys()
                     );
                 }
@@ -97,7 +107,8 @@ impl CapsAnalyzer {
                 // We depend on a crate that produced no build artifact.
                 // It means it has no symbols of itself, and all references to it
                 // are really references to this library.
-                // println!("MISSING DEPENDENCY: '{dep_crate_name}'");
+                // Example: dependencies: addr2line, gimli, hashbrown, proc_macro
+                // println!("{crate_name} depends on '{dep_crate_name}' which we haven't compiled");
             }
         }
 
@@ -108,6 +119,16 @@ impl CapsAnalyzer {
                 let prev = crate_caps.insert(kind.clone(), deduced_caps.clone());
                 debug_assert!(prev.is_none(), "Added {crate_name} {kind} twice");
             }
+        }
+
+        if has_build_rs(package) {
+            // Insert this _after_ storing it to self.crate_caps
+            // so that it is not contagious.
+            // TODO: should probably label proc-macros as dangerous too
+            deduced_caps
+                .own_caps
+                .entry(Capability::BuildRs)
+                .or_default();
         }
 
         let crate_kind_suffix = {
@@ -132,7 +153,7 @@ impl CapsAnalyzer {
             let symbol_names: Vec<String> = deduced_caps
                 .unknown_symbols
                 .iter()
-                .reservoir_sample(3, &mut rand::rng())
+                .reservoir_sample(3)
                 .iter()
                 .map(|s| s.format(false))
                 .collect();
@@ -174,7 +195,7 @@ impl CapsAnalyzer {
             let mut info = format!("{}Any because of", Capability::Any.emoji());
             // TODO: pick a random reasons instead of the first N
             let max_width = 60;
-            for symbol in reasons.iter().reservoir_sample(5, &mut rand::rng()) {
+            for symbol in reasons.iter().reservoir_sample(5) {
                 if info.len() < max_width {
                     info += &format!(" {}", symbol.format(false));
                 } else {

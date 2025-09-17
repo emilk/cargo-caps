@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -14,6 +15,12 @@ pub type CapabilitySet = BTreeSet<Capability>;
 /// or is suspected of having.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Capability {
+    /// This crate has a custom build step (build.rs)
+    ///
+    /// NOT contagious!
+    /// Depending on a crate with a build.rs file does not give you the `BuildRs` capability.
+    BuildRs,
+
     /// Allocate memory (`Box::new`, `Vec::new`, …)
     Alloc,
 
@@ -45,6 +52,7 @@ pub enum Capability {
 impl std::fmt::Display for Capability {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::BuildRs => write!(f, "build.rs"),
             Self::Alloc => write!(f, "alloc"),
             Self::Panic => write!(f, "panic"),
             Self::Time => write!(f, "time"),
@@ -61,6 +69,7 @@ impl std::fmt::Display for Capability {
 impl Capability {
     pub fn emoji(&self) -> &'static str {
         match self {
+            Self::BuildRs => "🛠️ ",
             Self::Alloc => "📦",
             Self::Panic => "❗️",
             Self::Time => "⏰",
@@ -183,15 +192,11 @@ impl DeducedCapabilities {
                         let segments = rust_path.segments();
 
                         let crate_name = segments[0];
-                        debug_assert!(
-                            !crate_name.is_empty()
-                                && crate_name
-                                    .chars()
-                                    .all(|c| c.is_ascii_alphanumeric() || c == '_'),
-                            "Weird crate name: {crate_name:?} in symbol {symbol:?}"
-                        );
+                        let crate_name = CrateName::new(crate_name)
+                            .with_context(|| format!("mangled: {:?}", symbol.mangled))
+                            .with_context(|| format!("demangled: {:?}", symbol.demangled))?;
                         self.unknown_crates
-                            .entry(CrateName::new(crate_name)?)
+                            .entry(crate_name)
                             .or_default()
                             .insert(symbol.clone());
                     }
