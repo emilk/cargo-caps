@@ -141,9 +141,15 @@ impl TypeName {
             Ok(Self::Tuple(elements))
         } else if symbol.starts_with('[') {
             if symbol.ends_with(']') {
-                Ok(Self::Slice(Box::new(Self::parse(
-                    &symbol[1..symbol.len() - 1],
-                )?)))
+                // [T] or [T; N]?
+                if let Some(semi) = symbol.rfind("; ") {
+                    // TODO: parse into Self::FixedSizeArray
+                    Ok(Self::Slice(Box::new(Self::parse(&symbol[1..semi])?)))
+                } else {
+                    Ok(Self::Slice(Box::new(Self::parse(
+                        &symbol[1..symbol.len() - 1],
+                    )?)))
+                }
             } else {
                 anyhow::bail!("Bad type name: {symbol:?}")
             }
@@ -337,6 +343,10 @@ mod test {
             (
                 r#"<extern "C" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#,
                 vec!["objc::runtime::Sel", "objc::declare::MethodImplementation"],
+            ),
+            (
+                "<[(K,V); N] as axum_core::response::into_response::IntoResponse>::into_response",
+                vec!["axum_core::response::into_response::IntoResponse"],
             ),
         ];
 

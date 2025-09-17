@@ -80,7 +80,6 @@
 
             "dispatch_semaphore_*",
 
-            "Unwind_Resume", // Rust exception handling
             "rust_eh_personality", // Rust exception handling
             "rust_no_alloc_shim_is_unstable*",
 
@@ -288,7 +287,7 @@
             "rust_panic_cleanup",
             "rust_panic",
             "rust_start_panic",
-            "Unwind_*",
+            "Unwind_*", // Rust exception handling
         ],
     ),
     (
@@ -336,6 +335,11 @@
 
             "std::thread::park",
             "std::os::fd::owned::OwnedFd",
+
+            "CFStringGetCStringPtr",
+            "CFRelease",
+            "CFStringGetBytes",
+            "CFStringGetLength",
 
             // I doubt these allocate, but 🤷
             "std::char::*",
@@ -418,6 +422,9 @@
         ],
         patterns: [
             "std::time::*",
+            "std::sys::pal::unix::time::*",
+            "CFTimeZoneGetName",
+            "CFTimeZoneCopySystem",
         ],
     ),
     (

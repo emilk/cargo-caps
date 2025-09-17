@@ -21,10 +21,10 @@ pub fn demangle_symbol(name: &str) -> String {
 
 fn decode_rust_type(mut encoded: &str) -> String {
     // Find things like `$LT,GT$"` and decode into `<>`:
-    let mut out = String::new();
+    let mut decoded = String::new();
 
     while let Some(start_dollar) = encoded.find('$') {
-        out.push_str(&encoded[..start_dollar]);
+        decoded.push_str(&encoded[..start_dollar]);
         encoded = &encoded[start_dollar + 1..];
         if let Some(end_dollar) = encoded.find('$') {
             let contents = &encoded[..end_dollar];
@@ -34,9 +34,9 @@ fn decode_rust_type(mut encoded: &str) -> String {
                     if let Ok(nr) = u32::from_str_radix(nr, 16)
                         && let Some(c) = char::from_u32(nr)
                     {
-                        out.push(c);
+                        decoded.push(c);
                     } else {
-                        out.push_str(part); // fail
+                        decoded.push_str(part); // fail
                     }
                 } else {
                     let replacement = match part {
@@ -49,7 +49,7 @@ fn decode_rust_type(mut encoded: &str) -> String {
                         "RP" => ")",
                         part => part,
                     };
-                    out.push_str(replacement);
+                    decoded.push_str(replacement);
                 }
             }
             encoded = &encoded[end_dollar + 1..];
@@ -57,10 +57,10 @@ fn decode_rust_type(mut encoded: &str) -> String {
             break;
         }
     }
-    out.push_str(encoded);
+    decoded.push_str(encoded);
 
     // Second round:
-    out.replace(" .> ", " -> ").replace("..", "::")
+    decoded.replace(" .> ", " -> ").replace("..", "::")
 }
 
 /// Try to manually demangle Itanium ABI symbols that standard demanglers can't handle
