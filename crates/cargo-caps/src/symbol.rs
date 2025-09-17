@@ -1,7 +1,5 @@
 use std::fmt;
 
-use anyhow::bail;
-
 use crate::{
     demangle::demangle_symbol, print::PrintOptions, rust_path::RustPath, rust_type::TraitFnImpl,
 };

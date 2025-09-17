@@ -210,6 +210,9 @@
             "std::thread::Thread::id",
             "std::thread::ThreadId*",
 
+            "std::thread::park",
+            "std::os::fd::owned::OwnedFd",
+
             // I doubt these allocate, but 🤷
             "std::char::*",
             "std::f32::*",
@@ -281,6 +284,7 @@
         ],
         patterns: [
             "std::net::*",
+            "std::sys::net::*",
         ],
     ),
     (

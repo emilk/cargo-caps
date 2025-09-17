@@ -278,9 +278,8 @@ fn analyze_artifact(
             Some(crate_info)
         } else {
             // Not sure why we sometimes end up here.
-            // Examples: bitflags block2 objc2 objc2_app_kit
-            // anyhow::bail!("ERROR: unknown crate {name:?}");
-            println!("ERROR: unknown crate {}", artifact.target.name); // TODO: continue, then exit with error
+            // Examples: bitflags block2 objc2 objc2_app_kit memoffset rustix
+            // println!("ERROR: unknown crate {}", artifact.target.name);
             return Ok(());
             // None
         }

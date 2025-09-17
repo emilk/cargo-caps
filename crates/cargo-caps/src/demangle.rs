@@ -27,6 +27,7 @@ fn decode_rust_type(encoded: &str) -> String {
         .replace("$GT$", ">")
         .replace("$LP$", "(")
         .replace("$LT,GT$", "<>")
+        .replace("$LT,C$", "<,")
         .replace("$LT$", "<")
         .replace("$RF$", "&")
         .replace("$RP$", ")")

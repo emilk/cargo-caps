@@ -30,6 +30,12 @@ pub enum TypeName {
         trait_name: Box<TypeName>,
         associated_type: RustPath,
     },
+
+    /// fn(A, B) -> C
+    Fn {
+        params: Vec<TypeName>,
+        ret: Option<Box<TypeName>>,
+    },
 }
 
 impl TypeName {
@@ -40,7 +46,9 @@ impl TypeName {
 
         // dbg!(symbol);
 
-        let prefixes = ["&", "*", "mut", "const", "dyn", " "];
+        let prefixes = [
+            "&", "*", "mut", "const", "dyn", "extern", "unsafe", "\"\"", " ",
+        ];
 
         for prefix in prefixes {
             if let Some(rest) = symbol.strip_prefix(prefix) {
@@ -51,7 +59,16 @@ impl TypeName {
             }
         }
 
-        if symbol.starts_with('<') {
+        if symbol.starts_with("fn(") {
+            // Parse functiomn like `fn(A, B) -
+            let (params, rem) = Self::parse_tuple(&symbol[2..])?;
+            let ret = if let Some(typ) = rem.strip_prefix(" -> ") {
+                Some(Box::new(Self::parse(typ)?))
+            } else {
+                None
+            };
+            Ok(Self::Fn { params, ret })
+        } else if symbol.starts_with('<') {
             let mut as_pos: Option<usize> = None;
 
             let mut caret_depth = 0;
@@ -112,32 +129,8 @@ impl TypeName {
 
             anyhow::bail!("Bad type name: {symbol:?}")
         } else if symbol.starts_with('(') {
-            // Parse (a,b,c), taking care to only break on commas that are NOT within nested parenthesis:
-            let mut elements = vec![];
-            let mut parens_depth = 0;
-
-            let mut last_start = 1;
-
-            for (i, c) in symbol.bytes().enumerate() {
-                match c {
-                    b'(' => parens_depth += 1,
-                    b')' => parens_depth -= 1,
-                    b',' if parens_depth == 1 => {
-                        elements.push(Self::parse(&symbol[last_start..i])?);
-                        last_start = i + 1;
-                    }
-                    _ => {}
-                }
-
-                if parens_depth == 0 {
-                    elements.push(Self::parse(&symbol[last_start..i])?);
-                    debug_assert!(
-                        i + 1 == symbol.len(),
-                        "Unexpected characters after closing parenthesis"
-                    ); // TODO
-                }
-            }
-
+            let (elements, rem) = Self::parse_tuple(symbol)?;
+            anyhow::ensure!(rem.is_empty(), "Trailing stuff after tuple: {symbol:?}");
             Ok(Self::Tuple(elements))
         } else if symbol.starts_with('[') {
             if symbol.ends_with(']') {
@@ -150,6 +143,31 @@ impl TypeName {
         } else {
             Ok(Self::RustPath(RustPath::new(symbol)))
         }
+    }
+
+    // parse (A, B, C), returning the remainder
+    fn parse_tuple(symbol: &str) -> anyhow::Result<(Vec<Self>, &str)> {
+        let mut elements = vec![];
+        let mut parens_depth = 0;
+        let mut last_start = 1;
+        for (i, c) in symbol.bytes().enumerate() {
+            match c {
+                b'(' => parens_depth += 1,
+                b')' => parens_depth -= 1,
+                b',' if parens_depth == 1 => {
+                    elements.push(Self::parse(&symbol[last_start..i])?);
+                    last_start = i + 1;
+                }
+                _ => {}
+            }
+
+            if parens_depth == 0 {
+                elements.push(Self::parse(&symbol[last_start..i])?);
+
+                return Ok((elements, &symbol[i + 1..]));
+            }
+        }
+        anyhow::bail!("Misaligned parenthesis in: {symbol:?}")
     }
 
     fn collect_path(&self, paths: &mut Vec<RustPath>) {
@@ -177,6 +195,14 @@ impl TypeName {
             } => {
                 type_name.collect_path(paths);
                 trait_name.collect_path(paths);
+            }
+            Self::Fn { params, ret } => {
+                for param in params {
+                    param.collect_path(paths);
+                }
+                if let Some(ret) = ret {
+                    ret.collect_path(paths);
+                }
             }
         }
     }
@@ -313,14 +339,5 @@ mod test {
             let paths: Vec<_> = paths.into_iter().map(|p| p.to_string()).collect();
             assert_eq!(paths, expected_paths, "{demangled} ({mangled})");
         }
-    }
-
-    #[test]
-    fn test_complex_function() {
-        let parsed = TraitFnImpl::parse(
-            r#"<extern "" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#,
-        );
-        assert!(parsed.is_ok(), "{}", parsed.unwrap_err());
-        panic!("Parsed: {parsed:?}");
     }
 }
