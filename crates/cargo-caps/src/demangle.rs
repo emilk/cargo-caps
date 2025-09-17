@@ -9,9 +9,6 @@ pub fn demangle_symbol(name: &str) -> String {
         decode_rust_type(name)
     };
 
-    if let Ok(train_fn_impl) = crate::symbol::TraitFnImpl::parse(&demangled) {
-        demangled = train_fn_impl.to_string(); // TODO: don't waste this parsing
-    }
     // Some function names ends with e.g. ::hdfea6b6d53cc7e8c - strip that:
     if let Some(hash_pos) = demangled.rfind("::h") {
         demangled = demangled[..hash_pos].to_owned();

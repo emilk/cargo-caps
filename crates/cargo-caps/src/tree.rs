@@ -1,9 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{
-    rust_path::RustPath,
-    symbol::{Symbol, TraitFnImpl},
-};
+use crate::{rust_path::RustPath, rust_type::TraitFnImpl, symbol::Symbol};
 
 #[derive(Debug, Clone)]
 pub enum Tree {
@@ -141,8 +138,6 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
             }
             insert_leaf(category, &symbol);
         } else if let Ok(trait_impl) = TraitFnImpl::parse(demangled) {
-            symbol.demangled = trait_impl.to_string();
-
             for path in trait_impl.paths() {
                 let segments = path.segments();
                 if segments.len() <= 1 {

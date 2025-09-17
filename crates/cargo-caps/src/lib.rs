@@ -25,6 +25,7 @@ pub mod demangle;
 pub mod print;
 mod reservoir_sample;
 pub mod rust_path;
+mod rust_type;
 pub mod symbol;
 pub mod tree;
 
