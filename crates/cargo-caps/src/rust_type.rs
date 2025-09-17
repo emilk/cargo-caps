@@ -47,7 +47,14 @@ impl TypeName {
         // dbg!(symbol);
 
         let prefixes = [
-            "&", "*", "mut", "const", "dyn", "extern", "unsafe", "\"\"", " ",
+            "*",
+            "&",
+            "const",
+            "dyn",
+            "mut",
+            "unsafe",
+            r#"extern "C""#,
+            " ",
         ];
 
         for prefix in prefixes {
@@ -328,7 +335,7 @@ mod test {
                 vec!["syn::attr::Attribute", "syn::attr::FilterAttrs"],
             ),
             (
-                r#"<extern "" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#,
+                r#"<extern "C" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#,
                 vec!["objc::runtime::Sel", "objc::declare::MethodImplementation"],
             ),
         ];

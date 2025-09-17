@@ -19,31 +19,48 @@ pub fn demangle_symbol(name: &str) -> String {
     demangled
 }
 
-fn decode_rust_type(encoded: &str) -> String {
-    // TODO: make this better
-    let encoded = encoded
-        .replace("$BP$", "*")
-        .replace("$C$", ",")
-        .replace("$GT$", ">")
-        .replace("$LP$", "(")
-        .replace("$LT,GT$", "<>")
-        .replace("$LT,C$", "<,")
-        .replace("$LT$", "<")
-        .replace("$RF$", "&")
-        .replace("$RP$", ")")
-        .replace("$u20$", " ")
-        .replace("$u22,u22$", "\"\"")
-        .replace("$u22$", "\"")
-        .replace("$u2b$", "+")
-        .replace("$u3b$", ";")
-        .replace("$u3d$", "=")
-        .replace("$u5b$", "[")
-        .replace("$u5d$", "]")
-        .replace("$u7b$", "{")
-        .replace("$u7d$", "}");
+fn decode_rust_type(mut encoded: &str) -> String {
+    // Find things like `$LT,GT$"` and decode into `<>`:
+    let mut out = String::new();
+
+    while let Some(start_dollar) = encoded.find('$') {
+        out.push_str(&encoded[..start_dollar]);
+        encoded = &encoded[start_dollar + 1..];
+        if let Some(end_dollar) = encoded.find('$') {
+            let contents = &encoded[..end_dollar];
+            for part in contents.split(',') {
+                if let Some(nr) = part.strip_prefix('u') {
+                    // unicode:
+                    if let Ok(nr) = u32::from_str_radix(nr, 16)
+                        && let Some(c) = char::from_u32(nr)
+                    {
+                        out.push(c);
+                    } else {
+                        out.push_str(part); // fail
+                    }
+                } else {
+                    let replacement = match part {
+                        "BP" => "*",
+                        "C" => ",",
+                        "RF" => "&",
+                        "LT" => "<",
+                        "GT" => ">",
+                        "LP" => "(",
+                        "RP" => ")",
+                        part => part,
+                    };
+                    out.push_str(replacement);
+                }
+            }
+            encoded = &encoded[end_dollar + 1..];
+        } else {
+            break;
+        }
+    }
+    out.push_str(encoded);
 
     // Second round:
-    encoded.replace(" .> ", " -> ").replace("..", "::")
+    out.replace(" .> ", " -> ").replace("..", "::")
 }
 
 /// Try to manually demangle Itanium ABI symbols that standard demanglers can't handle
@@ -113,7 +130,10 @@ mod tests {
 
         // Should extract the namespace components and decode Unicode escapes
         assert!(demangled.contains("egui::context::IMMEDIATE_VIEWPORT_RENDERER"));
-        assert!(demangled.contains("{{constant}}"));
+        assert!(
+            demangled.contains("{{constant}}"),
+            "demangled: {demangled:?}"
+        );
         assert!(demangled.contains("{{closure}}"));
         assert!(!demangled.contains("$u7b$"));
         assert!(!demangled.contains("$u7d$"));
@@ -162,7 +182,7 @@ mod tests {
             demangle_symbol(
                 "__ZN135_$LT$extern$u20$$u22$C$u22$$u20$fn$LP$$RF$T$C$objc..runtime..Sel$RP$$u20$.$GT$$u20$R$u20$as$u20$objc..declare..MethodImplementation$GT$3imp17h8f6f1e820e818e51E"
             ),
-            r#"<extern "" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#
+            r#"<extern "C" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#
         );
     }
 }
