@@ -15,12 +15,6 @@ impl Default for Tree {
 }
 
 impl Tree {
-    /// Create a Tree from a list of symbols, grouping by dot-separated prefixes
-    pub fn from_symbols(symbols: &[Symbol]) -> Self {
-        let grouped = group_symbols_by_prefix(symbols);
-        Self::Node(grouped)
-    }
-
     /// Get the count of symbols in this tree
     pub fn symbol_count(&self) -> usize {
         match self {
@@ -61,52 +55,6 @@ impl Tree {
             }
         }
     }
-}
-
-fn group_symbols_by_prefix(symbols: &[Symbol]) -> BTreeMap<String, Tree> {
-    let mut grouped: BTreeMap<String, Vec<Symbol>> = BTreeMap::new();
-
-    for symbol in symbols {
-        let name = &symbol.demangled;
-
-        // Special handling for GCC_except_table symbols
-        let prefix = if name.starts_with("GCC_except_table") {
-            "GCC_except_table"
-        } else if let Some(dot_pos) = name.find('.') {
-            // Extract prefix before first dot, or use the entire name if no dot
-            &name[..dot_pos]
-        } else {
-            name
-        };
-
-        grouped
-            .entry(prefix.to_owned())
-            .or_default()
-            .push(symbol.clone());
-    }
-
-    // Convert grouped symbols to Tree nodes
-    grouped
-        .into_iter()
-        .map(|(prefix, symbols)| {
-            let tree = if symbols.len() == 1 {
-                Tree::Leaf(
-                    symbols
-                        .into_iter()
-                        .next()
-                        .expect("symbols vector should have exactly one element"),
-                )
-            } else {
-                Tree::Node(
-                    symbols
-                        .into_iter()
-                        .map(|symbol| (symbol.demangled.clone(), Tree::Leaf(symbol)))
-                        .collect(),
-                )
-            };
-            (prefix, tree)
-        })
-        .collect()
 }
 
 pub fn get_or_create_category(

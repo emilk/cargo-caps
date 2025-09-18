@@ -14,11 +14,10 @@ pub use capability::{Capability, CapabilitySet};
 
 use crate::symbol::{Symbol, SymbolKind, SymbolScope};
 
-// TODO: less pub here
-mod analyzer;
 mod build_graph_analysis;
 mod cap_rule;
 mod capability;
+mod checker;
 mod commands;
 mod config;
 mod crate_name;

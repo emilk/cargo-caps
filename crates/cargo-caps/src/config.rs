@@ -59,8 +59,8 @@ pub enum CratePattern {
 impl CratePattern {
     pub fn matches(&self, crate_name: &CrateName) -> bool {
         match self {
-            CratePattern::Any => true,
-            CratePattern::Specific(name) => name == crate_name,
+            Self::Any => true,
+            Self::Specific(name) => name == crate_name,
         }
     }
 }

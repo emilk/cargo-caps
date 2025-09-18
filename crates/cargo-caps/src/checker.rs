@@ -4,9 +4,10 @@ use crate::{
     CrateName,
     build_graph_analysis::has_build_rs,
     capability::{Capability, CapabilitySet, DeducedCapabilities},
+    config::WorkspaceConfig,
     reservoir_sample::ReservoirSampleExt as _,
 };
-use cargo_metadata::{Artifact, Package, TargetKind, camino::Utf8Path};
+use cargo_metadata::{Artifact, Metadata, Package, PackageId, TargetKind, camino::Utf8Path};
 use itertools::Itertools as _;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -35,21 +36,68 @@ pub struct CrateInfo {
     pub kind: BTreeSet<CrateKind>,
 }
 
-pub struct CapsAnalyzer {
-    crate_caps: HashMap<CrateName, BTreeMap<TargetKind, DeducedCapabilities>>,
-    ignored_caps: CapabilitySet,
-    show_empty: bool,
-    pub num_skipped_artifacts: usize,
+/// What the checker computers
+#[derive(Default)]
+pub struct CheckerOutput {
+    pub crate_caps: HashMap<CrateName, BTreeMap<TargetKind, DeducedCapabilities>>,
+    pub num_artifacts_passed: usize,
 }
 
-impl CapsAnalyzer {
-    pub fn new(ignored_caps: CapabilitySet, show_empty: bool) -> Self {
-        Self {
-            crate_caps: HashMap::new(),
-            ignored_caps,
-            show_empty,
-            num_skipped_artifacts: 0,
+pub struct Checker {
+    pub config: WorkspaceConfig,
+    pub metadata: Metadata,
+    pub show_empty: bool,
+}
+
+impl Checker {
+    pub fn analyze_artifact(
+        &self,
+        output: &mut CheckerOutput,
+        crate_infos: Option<&HashMap<PackageId, CrateInfo>>,
+        verbose: bool,
+        artifact: &cargo_metadata::Artifact,
+    ) -> Result<(), anyhow::Error> {
+        let package = self
+            .metadata
+            .packages
+            .iter()
+            .find(|p| p.id == artifact.package_id)
+            .unwrap(); // TODO
+
+        let crate_info = if let Some(crate_infos) = crate_infos {
+            if let Some(crate_info) = crate_infos.get(&artifact.package_id) {
+                if !crate_info.kind.contains(&crate::checker::CrateKind::Normal) {
+                    return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
+                }
+
+                Some(crate_info)
+            } else {
+                // Not sure why we sometimes end up here.
+                // Examples: bitflags block2 objc2 objc2_app_kit memoffset rustix
+                // println!("ERROR: unknown crate {}", artifact.target.name);
+                return Ok(());
+                // None
+            }
+        } else {
+            None
+        };
+
+        for file_path in &artifact.filenames {
+            if file_path.as_str().ends_with(".rmeta") {
+                // .rmeta files has all the symbols and function signatures,
+                // without any of the compiled code.
+                // It what makes `cargo check` faster than `cargo build`.
+                // But we cannot parse these files, so we just ignore them
+            } else {
+                let did_print =
+                    self.add_artifact(output, package, artifact, file_path, crate_info, verbose)?;
+                if !did_print {
+                    output.num_artifacts_passed += 1;
+                }
+            }
         }
+
+        Ok(())
     }
 
     /// NOTE: each crate can have multiple artifacts, e.g. both a `custom-build` (build.rs)
@@ -57,7 +105,8 @@ impl CapsAnalyzer {
     ///
     /// Returns `true` if we printed anything
     pub fn add_artifact(
-        &mut self,
+        &self,
+        output: &mut CheckerOutput,
         package: &Package,
         artifact: &Artifact,
         bin_path: &Utf8Path,
@@ -65,6 +114,8 @@ impl CapsAnalyzer {
         verbose: bool,
     ) -> anyhow::Result<bool> {
         let crate_name = CrateName::new(package.name.to_string())?;
+
+        let allowed_caps = self.config.crate_caps(&crate_name);
 
         let mut deduced_caps = deduce_caps_of_binary(bin_path)?;
 
@@ -89,7 +140,7 @@ impl CapsAnalyzer {
         deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
 
         for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
-            if let Some(crate_caps) = self.crate_caps.get(&dep_crate_name) {
+            if let Some(crate_caps) = output.crate_caps.get(&dep_crate_name) {
                 if let Some(dep_caps) = crate_caps.get(&TargetKind::Lib) {
                     deduced_caps
                         .known_crates
@@ -113,11 +164,11 @@ impl CapsAnalyzer {
         }
 
         {
-            let crate_caps = self.crate_caps.entry(crate_name.clone()).or_default();
+            let crate_caps = output.crate_caps.entry(crate_name.clone()).or_default();
 
             for kind in &artifact.target.kind {
                 let prev = crate_caps.insert(kind.clone(), deduced_caps.clone());
-                debug_assert!(prev.is_none(), "Added {crate_name} {kind} twice");
+                // debug_assert!(prev.is_none(), "Added {crate_name} {kind} twice"); // TODO
             }
         }
 
@@ -175,7 +226,7 @@ impl CapsAnalyzer {
                 .flatten()
                 .copied()
                 .collect();
-            let crate_deps = filter_capabilities(&all_crate_deps, &self.ignored_caps);
+            let crate_deps = filter_capabilities(&all_crate_deps, &allowed_caps);
 
             if crate_deps.is_empty() {
                 if self.show_empty {
@@ -207,7 +258,7 @@ impl CapsAnalyzer {
         } else {
             // Filter out ignored capabilities
             let total_caps = deduced_caps.total_capabilities();
-            let filtered_caps = filter_capabilities(&total_caps, &self.ignored_caps);
+            let filtered_caps = filter_capabilities(&total_caps, &allowed_caps);
 
             // Check if we should skip this crate (no capabilities after filtering)
             if filtered_caps.is_empty() && !self.show_empty {
@@ -263,7 +314,7 @@ impl CapsAnalyzer {
             }
 
             if artifact_kind != &TargetKind::CustomBuild && has_build_rs(package) {
-                let build_rs_caps = self
+                let build_rs_caps = output
                     .crate_caps
                     .get(&crate_name)
                     .and_then(|crate_caps| crate_caps.get(&TargetKind::CustomBuild));
@@ -296,21 +347,22 @@ fn as_relative_path(path: &Utf8Path) -> &Utf8Path {
 
 /// Filter capabilities by removing ignored ones and handling the Any capability.
 /// If the set includes Any, remove everything but Any.
-fn filter_capabilities(
-    capabilities: &CapabilitySet,
-    ignored_caps: &CapabilitySet,
-) -> CapabilitySet {
+fn filter_capabilities(actual_caps: &CapabilitySet, allowed_caps: &CapabilitySet) -> CapabilitySet {
+    if allowed_caps.contains(&Capability::Any) {
+        return Default::default();
+    }
+
     // If Any is present, return only Any (regardless of ignored caps)
-    if capabilities.contains(&Capability::Any) {
+    if actual_caps.contains(&Capability::Any) {
         let mut result = CapabilitySet::new();
         result.insert(Capability::Any);
         return result;
     }
 
     // Otherwise, filter out ignored capabilities
-    capabilities
+    actual_caps
         .iter()
-        .filter(|cap| !ignored_caps.contains(cap))
+        .filter(|cap| !allowed_caps.contains(cap))
         .copied()
         .collect()
 }

@@ -72,7 +72,7 @@ impl SymbolCommand {
                 );
             }
 
-            crate::print::print_symbols(binary_path, &filtered_symbols, &options)?;
+            crate::print::print_symbols(binary_path, &filtered_symbols, &options);
         }
         Ok(())
     }

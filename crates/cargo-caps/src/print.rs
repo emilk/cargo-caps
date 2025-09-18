@@ -1,4 +1,3 @@
-use anyhow::Result;
 use cargo_metadata::camino::Utf8Path;
 
 use crate::{
@@ -61,18 +60,14 @@ fn print_tree(tree: &Tree, prefix: &str, max_depth: u32, options: &PrintOptions)
     }
 }
 
-pub fn print_symbols(
-    binary_path: &Utf8Path,
-    symbols: &[Symbol],
-    options: &PrintOptions,
-) -> Result<()> {
+pub fn print_symbols(binary_path: &Utf8Path, symbols: &[Symbol], options: &PrintOptions) {
     let depth = options.depth;
 
     if depth == 0 {
         let total_symbols = symbols.len();
         println!("{binary_path}");
         println!("└── {total_symbols} total symbols");
-        return Ok(());
+        return;
     }
 
     let mut tree = tree_from_symbols(symbols);
@@ -90,7 +85,7 @@ pub fn print_symbols(
         } else {
             println!("{binary_path}/{filter_path}");
             println!("└── (no symbols found)");
-            return Ok(());
+            return;
         }
     }
 
@@ -99,6 +94,4 @@ pub fn print_symbols(
 
     // Print the entire tree using the single print_tree function
     print_tree(&tree, "", depth, options);
-
-    Ok(())
 }

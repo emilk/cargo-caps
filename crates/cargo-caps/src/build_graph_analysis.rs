@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use cargo_metadata::{DependencyKind, Metadata, Package, PackageId, TargetKind};
 use petgraph::{Directed, graph::NodeIndex, visit::EdgeRef as _};
 
-use crate::analyzer::{CrateInfo, CrateKind};
+use crate::checker::{CrateInfo, CrateKind};
 
 pub fn has_build_rs(package: &Package) -> bool {
     package
@@ -226,6 +226,7 @@ fn dependency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTr
 
     for &dep_kind in &edge.kind {
         for &crate_kind in &dependent.kind {
+            #[expect(clippy::match_same_arms)]
             let new_kind = match (dep_kind, crate_kind) {
                 // All dependencies ON proc-macros are marked proc-macros:
                 (_, CrateKind::ProcMacro) => CrateKind::ProcMacro,
@@ -256,7 +257,7 @@ fn dependency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTr
 mod tests {
     #![allow(clippy::single_char_pattern)]
 
-    use crate::analyzer::CrateKind;
+    use crate::checker::CrateKind;
     use cargo_metadata::PackageId;
 
     use super::*;

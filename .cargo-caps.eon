@@ -7,22 +7,20 @@ rules: [
 	{
 		// Capabilities all crates are allowed:
 		crates: ["*"]
-		caps: ["alloc", "panic", "time"]
+		caps: ["alloc", "panic", "stdio", "time"]
 	}
 	{
 		// These crates are allowed to have build.rs files
 		// TODO: it would be nice to be able to specify the capabilities of build.rs files
 		caps: ["build.rs"]
-		crates: []
+		crates: ["*"] // TODO: opt-in to afew
 	}
 	{
-		// These crates are allowed to access the network:
-		caps: ["net"]
+		// These crates are allowed to access files:
+		caps: ["fs"]
 		crates: [
-			"ureq"
-			"tonic"
-
-			// "tonic/*" // TODO: anything tonic depends on
+			"eon"
+			"url"
 		]
 	}
 ]

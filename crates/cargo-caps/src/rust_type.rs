@@ -286,8 +286,6 @@ fn strip_indirections(path: &str) -> &str {
 mod test {
     use crate::{demangle::demangle_symbol, symbol::FunctionOrPath};
 
-    use super::*;
-
     #[test]
     fn test_parse_trait_impl() {
         // TODO: handle recursive definitions like this one:
