@@ -19,33 +19,43 @@ pub enum Capability {
     ///
     /// NOT contagious!
     /// Depending on a crate with a build.rs file does not give you the `BuildRs` capability.
+    #[serde(rename = "build.rs")]
     BuildRs,
 
     /// Allocate memory (`Box::new`, `Vec::new`, …)
+    #[serde(rename = "alloc")]
     Alloc,
 
     /// Call [`panic!`]
+    #[serde(rename = "panic")]
     Panic,
 
     /// Read the current time and/or date
+    #[serde(rename = "time")]
     Time,
 
     /// Read environment variables, process info, …
+    #[serde(rename = "sysinfo")]
     Sysinfo,
 
     /// Read and write to stdin, stdout, stderr
+    #[serde(rename = "stdio")]
     Stdio,
 
     /// Spawn thread
+    #[serde(rename = "thread")]
     Thread,
 
     /// Connect over the network and/or listen for incoming network traffic
+    #[serde(rename = "net")]
     Net,
 
     /// Open a file on disk for reading or writing
+    #[serde(rename = "fs")]
     FS,
 
     /// Anything is possible, including everything else in this enum.
+    #[serde(rename = "*")]
     Any,
 }
 

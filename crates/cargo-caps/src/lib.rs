@@ -15,25 +15,26 @@ pub use capability::{Capability, CapabilitySet};
 use crate::symbol::{Symbol, SymbolKind, SymbolScope};
 
 // TODO: less pub here
-pub mod analyzer;
+mod analyzer;
 mod build_graph_analysis;
-pub mod cap_rule;
-pub mod capability;
-pub mod commands;
+mod cap_rule;
+mod capability;
+mod commands;
+mod config;
 mod crate_name;
-pub mod demangle;
-pub mod print;
+mod demangle;
+mod print;
 mod reservoir_sample;
-pub mod rust_path;
+mod rust_path;
 mod rust_type;
-pub mod symbol;
-pub mod tree;
+mod symbol;
+mod tree;
 
 pub use commands::Commands;
-pub use crate_name::CrateName;
+use crate_name::CrateName;
 
 /// Extract symbols from an binary, e..g an executable, `.dylib`, or an `.rlib`.
-pub fn extract_symbols(binary_path: &Utf8Path) -> Result<Vec<Symbol>> {
+fn extract_symbols(binary_path: &Utf8Path) -> Result<Vec<Symbol>> {
     let file_bytes =
         fs::read(binary_path).with_context(|| format!("Failed to read {binary_path}"))?;
 

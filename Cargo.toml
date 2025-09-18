@@ -16,12 +16,12 @@ ar = "0.9"
 cargo_metadata = "0.22"
 clap = { version = "4.0", features = ["derive"] }
 cpp_demangle = "0.4"
+eon = "0.2"
 itertools = "0.14"
 log-once = "0.4.1"
 object = "0.37.3"
 petgraph = "0.8.2"
 rand = "0.9"
-ron = "0.11"
 rustc-demangle = "0.1"
 serde = { version = "1.0.221", features = ["derive"] }
 serde_json = "1.0.144"

@@ -97,12 +97,17 @@ impl Rules {
 }
 
 pub fn default_rules() -> Rules {
-    static DEFAULT_RULES_RON: &str = include_str!("default_rules.ron");
+    static DEFAULT_RULES_EON: &str = include_str!("default_rules.eon");
 
-    let string_rules: Vec<SerializedRule> =
-        ron::from_str(DEFAULT_RULES_RON).expect("Failed to parse default rules RON file");
+    #[derive(serde::Deserialize)]
+    struct DefaultRules {
+        rules: Vec<SerializedRule>,
+    }
+
+    let loaded: DefaultRules =
+        eon::from_str(DEFAULT_RULES_EON).expect("Failed to parse default_rules.eon");
     Rules {
-        rules: string_rules.into_iter().map(|rule| rule.into()).collect(),
+        rules: loaded.rules.into_iter().map(|rule| rule.into()).collect(),
     }
 }
 

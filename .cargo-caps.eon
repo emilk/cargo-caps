@@ -1,0 +1,25 @@
+// Configuration file for cargo-caps.
+// See https://crates.io/crates/cargo-caps
+rules: [
+	{
+		// Capabilities all crates are allowed:
+		crates: ["*"]
+		caps: ["alloc", "panic", "time"]
+	}
+	{
+		// These crates are allowed to have build.rs files
+		// TODO: it would be nice to be able to specify the capabilities of build.rs files
+		caps: ["build.rs"]
+		crates: []
+	}
+	{
+		// These crates are allowed to access the network:
+		caps: ["net"]
+		crates: [
+			"ureq"
+			"tonic"
+
+			// "tonic/*" // TODO: anything tonic depends on
+		]
+	}
+]

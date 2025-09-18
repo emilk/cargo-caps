@@ -5,12 +5,15 @@ use std::{
 };
 
 use anyhow::Context as _;
-use cargo_metadata::{Message, Metadata, MetadataCommand, PackageId, diagnostic::DiagnosticLevel};
+use cargo_metadata::{
+    Message, Metadata, MetadataCommand, PackageId, camino::Utf8PathBuf, diagnostic::DiagnosticLevel,
+};
 use itertools::Itertools as _;
 
 use crate::{
     Capability, CapabilitySet,
     analyzer::{CapsAnalyzer, CrateInfo},
+    config::WorkspaceConfig,
 };
 
 #[derive(clap::Parser)]
@@ -46,6 +49,10 @@ pub struct BuildCommand {
     /// Show crates with no capabilities after filtering
     #[arg(long = "show-empty")]
     pub show_empty: bool,
+
+    /// Where to load the config file for the current workspace
+    #[arg(long = "config", default_value = ".cargo-caps.eon")]
+    pub config: Utf8PathBuf,
 }
 
 /// Parse a comma-separated string of capability names (lowercase) into a set
@@ -78,6 +85,16 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
 
 impl BuildCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
+        let config = if self.config.exists() {
+            WorkspaceConfig::from_path(&self.config)?
+        } else {
+            println!(
+                "Expected config at {:?} - create one with 'cargo-caps init' or change the path with --config",
+                self.config
+            ); // TODO: cargo-caps init
+            WorkspaceConfig::default()
+        };
+
         let metadata = self.gather_cargo_metadata()?;
 
         // TODO: before starting the actual build,
