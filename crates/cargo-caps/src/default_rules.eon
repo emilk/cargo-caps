@@ -5,10 +5,9 @@ rules: [
 		patterns: [
 			// Anonymous functions… I think these are things LLVM generates, and should be fine.
 			// Curiously, they only show up in optimized builds.
-			"anon.*",
+			"anon.*"
 
 			// NOTE: cargo-caps ignores leading underscores
-
 			// Simple memory stuff:
 			".memset_pattern.*"
 			"bzero"
@@ -19,12 +18,11 @@ rules: [
 			"memset"
 			"strcmp"
 			"strcpy"
-			"strlen",
-
+			"strlen"
 			"abort"
 			"error"
 			"std::sys::pal::unix::os::errno"
-			"strerror_r",
+			"strerror_r"
 
 			// Math:
 			"acos"
@@ -60,33 +58,27 @@ rules: [
 			"sincosf_stret"
 			"sinf"
 			"tan"
-			"tanf",
-
+			"tanf"
 			"pthread_cond_*"
 			"pthread_mutex_*"
-			"close", // Closing a FILE is fine
+			"close" // Closing a FILE is fine
 
 			// Thread Local Variable
 			"tlv_atexit"
-			"tlv_bootstrap",
-
+			"tlv_bootstrap"
 			"divt*"
-			"muloti*", // Multiply?
-			"sdiv*", // unsigned div
-			"smod*", // unsigned modulus
-			"udiv*", // unsigned div
-			"umod*", // unsigned modulus
-			"modti*", // modulus
-
-			"dispatch_semaphore_*",
-
-			"rust_eh_personality", // Rust exception handling
-			"rust_no_alloc_shim_is_unstable*",
-
+			"muloti*" // Multiply?
+			"sdiv*" // unsigned div
+			"smod*" // unsigned modulus
+			"udiv*" // unsigned div
+			"umod*" // unsigned modulus
+			"modti*" // modulus
+			"dispatch_semaphore_*"
+			"rust_eh_personality" // Rust exception handling
+			"rust_no_alloc_shim_is_unstable*"
 			"CCRandomGenerateBytes"
-			"getentropy",
-
-			"rustc_proc_macro_decls_*",
+			"getentropy"
+			"rustc_proc_macro_decls_*"
 
 			// From https://gcc.gnu.org/onlinedocs/gccint/Soft-float-library-routines.html
 			"__addsf3"
@@ -217,47 +209,37 @@ rules: [
 			"__divdc3"
 			"__divtc3"
 			"__divxc3"
-		],
-	},
+		]
+	}
 	{
-		caps: [ "sysinfo" ]
+		caps: ["sysinfo"]
 		patterns: [
 			"getcwd"
 			"getenv"
 			"isatty"
-			"mach_task_self_", // Access to own PID
+			"mach_task_self_" // Access to own PID
 			"NSGetArgc"
 			"NSGetArgv"
 			"NSGetEnviron"
-		],
-	},
-	{
-		caps: [ "time" ]
-		patterns: [
-			"gettimeofday"
-		],
-	},
-	{
-		caps: [
-			"fs"
 		]
-		patterns: [
-			"dirfd"
-			"fstat"
-			"mmap"
-		],
-	},
+	}
 	{
-		caps: [ ]
+		caps: ["time"]
+		patterns: ["gettimeofday"]
+	}
+	{
+		caps: ["fs"]
+		patterns: ["dirfd", "fstat", "mmap"]
+	}
+	{
+		caps: []
 		patterns: [
 			// core has no capabilities
 			"core::*"
-		],
-	},
-	{
-		caps: [
-			"alloc"
 		]
+	}
+	{
+		caps: ["alloc"]
 		patterns: [
 			"calloc"
 			"free"
@@ -273,12 +255,10 @@ rules: [
 			"rust_alloc"
 			"rust_dealloc"
 			"rust_realloc"
-		],
-	},
-	{
-		caps: [
-			"panic"
 		]
+	}
+	{
+		caps: ["panic"]
 		patterns: [
 			"core::panicking::*"
 			"rust_begin_unwind"
@@ -287,22 +267,17 @@ rules: [
 			"rust_panic_cleanup"
 			"rust_panic"
 			"rust_start_panic"
-			"Unwind_*", // Rust exception handling
-		],
-	},
-	{
-		caps: [
-			"alloc"
+			"Unwind_*" // Rust exception handling
 		]
-		patterns: [
-			"alloc::*"
-		],
-	},
+	}
+	{
+		caps: ["alloc"]
+		patterns: ["alloc::*"]
+	}
+
 	// NOTE: Everything in std is generally allowed to allocate and panic
 	{
-		caps: [
-			"alloc", "panic"
-		]
+		caps: ["alloc", "panic"]
 		patterns: [
 			"std::backtrace::*"
 			"std::collections::*"
@@ -315,9 +290,9 @@ rules: [
 			"std::path::Path::components"
 			"std::path::Path::extension::*"
 			"std::path::Path::is_absolute"
-			"std::path::PathBuf", // NOT ::*, but just `<std::path::PathBuf as core::clone::Clone>::clone` is OK
-			"std::process::abort*", // TODO: consider adding special capability for abort/exit
-			"std::process::exit*", // TODO: consider adding special capability for abort/exit
+			"std::path::PathBuf" // NOT ::*, but just `<std::path::PathBuf as core::clone::Clone>::clone` is OK
+			"std::process::abort*" // TODO: consider adding special capability for abort/exit
+			"std::process::exit*" // TODO: consider adding special capability for abort/exit
 			"std::sync::*"
 			"std::sys::os_str::*"
 			"std::sys::pal::unix::abort_internal*"
@@ -325,21 +300,19 @@ rules: [
 			"std::sys::pal::unix::decode_error_kind"
 			"std::sys::pal::unix::sync::*"
 			"std::sys::process::unix::common::cstring_array::*"
-			"std::sys::random::*", // TODO: consider adding special capability for random
+			"std::sys::random::*" // TODO: consider adding special capability for random
 			"std::sys::sync::*"
 			"std::sys::thread_local::*"
 			"std::thread::current::current"
 			"std::thread::local::*"
 			"std::thread::Thread::id"
-			"std::thread::ThreadId*",
-
+			"std::thread::ThreadId*"
 			"std::thread::park"
-			"std::os::fd::owned::OwnedFd",
-
+			"std::os::fd::owned::OwnedFd"
 			"CFStringGetCStringPtr"
 			"CFRelease"
 			"CFStringGetBytes"
-			"CFStringGetLength",
+			"CFStringGetLength"
 
 			// I doubt these allocate, but 🤷
 			"std::char::*"
@@ -355,34 +328,22 @@ rules: [
 			"std::u32::*"
 			"std::u64::*"
 			"std::u8::*"
-		],
-	},
-	{
-		caps: [
-			"alloc", "panic"
-			"sysinfo"
 		]
+	}
+	{
+		caps: ["alloc", "panic", "sysinfo"]
 		patterns: [
 			"std::env::*"
 			"std::sys::backtrace::*"
 			"std::sys::io::is_terminal::*"
-		],
-	},
-	{
-		caps: [
-			"alloc", "panic"
-			"thread"
 		]
-		patterns: [
-			"std::sys::pal::unix::thread::Thread*"
-			"std::thread::*"
-		],
-	},
+	}
 	{
-		caps: [
-			"alloc", "panic"
-			"stdio"
-		]
+		caps: ["alloc", "panic", "thread"]
+		patterns: ["std::sys::pal::unix::thread::Thread*", "std::thread::*"]
+	}
+	{
+		caps: ["alloc", "panic", "stdio"]
 		patterns: [
 			"std::io::*"
 			"std::os::fd::owned::AsFd"
@@ -390,50 +351,36 @@ rules: [
 			"std::sys::io::io_slice::*"
 			"std::sys::pal::unix::stdio::*"
 			"std::sys::stdio::*"
-		],
-	},
-	{
-		caps: [
-			"alloc", "panic"
-			"fs"
 		]
+	}
+	{
+		caps: ["alloc", "panic", "fs"]
 		patterns: [
 			"fcntl"
 			"std::fs::*"
 			"std::path::*"
 			"std::sys::fs::*"
 			"std::sys::pal::unix::fs::*"
-		],
-	},
-	{
-		caps: [
-			"alloc", "panic"
-			"net"
 		]
-		patterns: [
-			"std::net::*"
-			"std::sys::net::*"
-		],
-	},
+	}
 	{
-		caps: [
-			"alloc", "panic"
-			"time"
-		]
+		caps: ["alloc", "panic", "net"]
+		patterns: ["std::net::*", "std::sys::net::*"]
+	}
+	{
+		caps: ["alloc", "panic", "time"]
 		patterns: [
 			"std::time::*"
 			"std::sys::pal::unix::time::*"
 			"CFTimeZoneGetName"
 			"CFTimeZoneCopySystem"
-		],
-	},
+		]
+	}
 	{
 		// TODO: categorize the rest of std:: :}
 		caps: [
 			"*" // conservatively assume the worst
 		]
-		patterns: [
-			"std::*"
-		],
-	},
+		patterns: ["std::*"]
+	}
 ]
