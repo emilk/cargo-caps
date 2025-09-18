@@ -17,7 +17,7 @@ TODO: publish `cargo-caps` on crates.io
 ## Run it
 Make sure you're in the root of a cargo project, then run:
 
-> `cargo-caps build`
+> `cargo-caps check`
 
 This will build your local project, and while doing so, print the capabilities of each crate it depends on, directly or indirectly.
 
@@ -28,7 +28,7 @@ This will build your local project, and while doing so, print the capabilities o
 Run cargo-caps on self:
 
 ```bash
-cargo run -p cargo-caps -- build
+cargo run -p cargo-caps -- check
 ```
 
 
@@ -51,7 +51,7 @@ To keep the config file short you can add some base level of capabilities that y
 For instance, you may allow all crates to `panic`, `alloc` memory and tell the `time`, but anything beyond that you must allow-list explicitly.
 
 ## How it works
-`cargo-caps build` will compile your code and all its dependencies (like `cargo build`) and then analyze the linker symbols.
+`cargo-caps check` will compile your code and all its dependencies (like `cargo build`) and then analyze the linker symbols.
 Based on these symbols `cargo-caps` will then infer _capabilities_ of each library.
 
 For instance: if a crate links with symbols `std::net::` then `cargo-deny` infers that the crate has the capability to communicate over network.

@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(clap::Parser)]
-pub struct BuildCommand {
+pub struct CheckCommand {
     #[arg(short = 'v', long = "verbose")]
     pub verbose: bool,
 
@@ -83,7 +83,7 @@ fn parse_ignored_caps(caps_str: &str) -> CapabilitySet {
         .collect()
 }
 
-impl BuildCommand {
+impl CheckCommand {
     pub fn execute(&self) -> anyhow::Result<()> {
         let config = if self.config.exists() {
             WorkspaceConfig::from_path(&self.config)?

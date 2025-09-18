@@ -1,5 +1,8 @@
 // Configuration file for cargo-caps.
 // See https://crates.io/crates/cargo-caps
+// The capabilities are additive:
+// if a crate matches several rules, the crate is granted
+// the union of the capabilities afforded by all the rules.
 rules: [
 	{
 		// Capabilities all crates are allowed:
