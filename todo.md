@@ -7,6 +7,11 @@
 - publish binaries for `binstall`
 
 
+There are two ways to figure out the dependencies of a crate:
+A) ask the linker (bad)
+B) ask cargo metadata (good)
+
+
 ### Testing
 - add test for build.rs
 - add test for proc-macros

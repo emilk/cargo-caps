@@ -83,4 +83,13 @@ pub fn test_capabilities() {
             let _ = fs::remove_file(temp_path);
         }
     }
+
+    #[cfg(feature = "two_rands")]
+    {
+        use rand_07::RngCore as _;
+        use rand_08::RngCore as _;
+
+        eprintln!("{}", rand_07::thread_rng().next_u32());
+        eprintln!("{}", rand_08::thread_rng().next_u32());
+    }
 }

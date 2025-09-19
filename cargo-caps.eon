@@ -7,7 +7,7 @@ rules: [
 	{
 		// Capabilities all crates are allowed:
 		crates: ["*"]
-		caps: ["alloc", "panic", "stdio", "time"]
+		caps: ["alloc", "panic", "stdio", "sysinfo", "time"]
 	}
 	{
 		// These crates are allowed to have build.rs files

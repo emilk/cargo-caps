@@ -15,6 +15,7 @@ fn main() -> anyhow::Result<()> {
     match args.command {
         Commands::Build(check_cmd) => check_cmd.execute(),
         Commands::Caps(caps_cmd) => caps_cmd.execute(),
+        Commands::Init(init_cmd) => init_cmd.execute(),
         Commands::Symbols(symbols_cmd) => symbols_cmd.execute(),
     }
 }

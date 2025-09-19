@@ -6,7 +6,8 @@ use std::{
 
 use anyhow::Context as _;
 use cargo_metadata::{
-    Message, Metadata, MetadataCommand, PackageId, camino::Utf8PathBuf, diagnostic::DiagnosticLevel,
+    CargoOpt, Message, Metadata, MetadataCommand, PackageId, camino::Utf8PathBuf,
+    diagnostic::DiagnosticLevel,
 };
 use itertools::Itertools as _;
 
@@ -45,7 +46,7 @@ pub struct CheckCommand {
     pub show_empty: bool,
 
     /// Where to load the config file for the current workspace
-    #[arg(long = "config", default_value = ".cargo-caps.eon")]
+    #[arg(long = "config", default_value = "cargo-caps.eon")]
     pub config: Utf8PathBuf,
 }
 
@@ -175,11 +176,25 @@ impl CheckCommand {
         crate::build_graph_analysis::analyze_dependency_graph(metadata, &sources)
     }
 
+    fn cargo_toml_path_of_package(crate_name: &str) -> anyhow::Result<Utf8PathBuf> {
+        let metadata = MetadataCommand::new()
+            .manifest_path("./Cargo.toml")
+            .features(CargoOpt::AllFeatures)
+            .exec()?;
+
+        // Search through workspace members
+        for package in &metadata.workspace_packages() {
+            if package.name.as_str() == crate_name {
+                return Ok(package.manifest_path.clone());
+            }
+        }
+        anyhow::bail!("Failed to locate manifest path of package '{crate_name}'");
+    }
+
     fn gather_cargo_metadata(&self) -> Result<cargo_metadata::Metadata, anyhow::Error> {
         let mut metadata_cmd = MetadataCommand::new();
-        if let Some(_package) = &self.package {
-            // For metadata, we need to specify the manifest path or current dir
-            // The package filter will be applied when analyzing
+        if let Some(package) = &self.package {
+            metadata_cmd.manifest_path(Self::cargo_toml_path_of_package(package)?);
         }
         if !self.features.is_empty() {
             metadata_cmd.features(cargo_metadata::CargoOpt::SomeFeatures(

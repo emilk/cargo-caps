@@ -17,15 +17,9 @@ thread = []
 net = []
 fread = []
 fwrite = []
-all = [
-    "panic",
-    "alloc",
-    "time",
-    "signal",
-    "sysinfo",
-    "stdio",
-    "thread",
-    "net",
-    "fread",
-    "fwrite",
-]
+two_rands = ["dep:rand_07", "dep:rand_08"]
+
+
+[dependencies]
+rand_07 = { package = "rand", version = "0.7", optional = true }
+rand_08 = { package = "rand", version = "0.8", optional = true }

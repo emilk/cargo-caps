@@ -351,6 +351,7 @@ rules: [
 			"std::sys::io::io_slice::*"
 			"std::sys::pal::unix::stdio::*"
 			"std::sys::stdio::*"
+			"std::sys::pal::unix::io::*"
 		]
 	}
 	{
@@ -358,6 +359,7 @@ rules: [
 		patterns: [
 			"fcntl"
 			"std::fs::*"
+			"std::os::unix::fs::*"
 			"std::path::*"
 			"std::sys::fs::*"
 			"std::sys::pal::unix::fs::*"

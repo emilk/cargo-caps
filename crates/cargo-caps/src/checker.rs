@@ -114,29 +114,36 @@ impl Checker {
             return Ok(false);
         }
 
-        deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
+        if true {
+            // We don't care about dependencies - we should have already have covered those.`
+            // TODO: veirfy that each unknown_crate is found in the cargo_metadata dependency list,
+            // or the symbol deducer might have a bug
+            deduced_caps.unknown_crates.clear();
+        } else {
+            deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
 
-        for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
-            if let Some(crate_caps) = output.crate_caps.get(&dep_crate_name) {
-                if let Some(dep_caps) = crate_caps.get(&TargetKind::Lib) {
-                    deduced_caps
-                        .known_crates
-                        .entry(dep_crate_name)
-                        .or_default()
-                        .extend(dep_caps.total_capabilities());
+            for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
+                if let Some(crate_caps) = output.crate_caps.get(&dep_crate_name) {
+                    if let Some(dep_caps) = crate_caps.get(&TargetKind::Lib) {
+                        deduced_caps
+                            .known_crates
+                            .entry(dep_crate_name)
+                            .or_default()
+                            .extend(dep_caps.total_capabilities());
+                    } else {
+                        // TODO: return error?
+                        println!(
+                            "{crate_name} depends on '{dep_crate_name}', but we have no Lib capabilities stored for it, only {:?}",
+                            crate_caps.keys()
+                        );
+                    }
                 } else {
-                    // TODO: return error?
-                    println!(
-                        "{crate_name} depends on '{dep_crate_name}', but we have no Lib capabilities stored for it, only {:?}",
-                        crate_caps.keys()
-                    );
+                    // We depend on a crate that produced no build artifact.
+                    // It means it has no symbols of itself, and all references to it
+                    // are really references to this library.
+                    // Example: dependencies: addr2line, gimli, hashbrown, proc_macro
+                    // println!("{crate_name} depends on '{dep_crate_name}' which we haven't compiled");
                 }
-            } else {
-                // We depend on a crate that produced no build artifact.
-                // It means it has no symbols of itself, and all references to it
-                // are really references to this library.
-                // Example: dependencies: addr2line, gimli, hashbrown, proc_macro
-                // println!("{crate_name} depends on '{dep_crate_name}' which we haven't compiled");
             }
         }
 
@@ -144,8 +151,15 @@ impl Checker {
             let crate_caps = output.crate_caps.entry(crate_name.clone()).or_default();
 
             for kind in &artifact.target.kind {
-                let prev = crate_caps.insert(kind.clone(), deduced_caps.clone());
-                // debug_assert!(prev.is_none(), "Added {crate_name} {kind} twice"); // TODO
+                // Append to existing, if any.
+                // Why? Because we don't know on which version the symbol is referring to
+                // … or do we???
+
+                crate_caps.insert(kind.clone(), deduced_caps.clone());
+                //     crate_caps
+                //         .entry(kind.clone())
+                //         .or_default()
+                //         .union_with(deduced_caps.clone());
             }
         }
 
@@ -164,6 +178,8 @@ impl Checker {
                 " (build.rs)".to_owned()
             } else if artifact.target.kind.contains(&TargetKind::ProcMacro) {
                 " (proc-macro)".to_owned()
+            } else if artifact.target.kind.contains(&TargetKind::Bin) {
+                " (bin)".to_owned()
             } else if let Some(crate_info) = crate_info {
                 if crate_info.kind.contains(&DepKind::Normal) {
                     String::new() // Not worth mentioning
