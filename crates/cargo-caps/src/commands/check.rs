@@ -11,7 +11,8 @@ use cargo_metadata::{
 use itertools::Itertools as _;
 
 use crate::{
-    checker::{Checker, CheckerOutput, CrateInfo},
+    build_graph_analysis::DepKindSet,
+    checker::{Checker, CheckerOutput},
     config::WorkspaceConfig,
 };
 
@@ -155,7 +156,7 @@ impl CheckCommand {
     fn calc_crate_kinds(
         &self,
         metadata: &Metadata,
-    ) -> anyhow::Result<HashMap<PackageId, CrateInfo>> {
+    ) -> anyhow::Result<HashMap<PackageId, DepKindSet>> {
         // Get the package(s) we're interested in
         let target_packages = if let Some(package_name) = &self.package {
             metadata

@@ -1,40 +1,14 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     CrateName,
-    build_graph_analysis::has_build_rs,
+    build_graph_analysis::{DepKind, DepKindSet, has_build_rs},
     capability::{Capability, CapabilitySet, DeducedCapabilities},
     config::WorkspaceConfig,
     reservoir_sample::ReservoirSampleExt as _,
 };
 use cargo_metadata::{Artifact, Metadata, Package, PackageId, TargetKind, camino::Utf8Path};
 use itertools::Itertools as _;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum CrateKind {
-    Unknown,
-    Normal,
-    Build,
-    Dev,
-    ProcMacro,
-}
-
-impl std::fmt::Display for CrateKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unknown => write!(f, "⚠️ unknown dependency type"),
-            Self::Normal => write!(f, "normal dependency"),
-            Self::Build => write!(f, "build-dependency"),
-            Self::Dev => write!(f, "dev-dependency"),
-            Self::ProcMacro => write!(f, "proc-macro"),
-        }
-    }
-}
-
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
-pub struct CrateInfo {
-    pub kind: BTreeSet<CrateKind>,
-}
 
 /// What the checker computers
 #[derive(Default)]
@@ -53,7 +27,7 @@ impl Checker {
     pub fn analyze_artifact(
         &self,
         output: &mut CheckerOutput,
-        crate_infos: Option<&HashMap<PackageId, CrateInfo>>,
+        crate_infos: Option<&HashMap<PackageId, DepKindSet>>,
         verbose: bool,
         artifact: &cargo_metadata::Artifact,
     ) -> Result<(), anyhow::Error> {
@@ -64,13 +38,13 @@ impl Checker {
             .find(|p| p.id == artifact.package_id)
             .unwrap(); // TODO
 
-        let crate_info = if let Some(crate_infos) = crate_infos {
-            if let Some(crate_info) = crate_infos.get(&artifact.package_id) {
-                if !crate_info.kind.contains(&crate::checker::CrateKind::Normal) {
+        let set = if let Some(sets) = crate_infos {
+            if let Some(set) = sets.get(&artifact.package_id) {
+                if !set.kind.contains(&DepKind::Normal) {
                     return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
                 }
 
-                Some(crate_info)
+                Some(set)
             } else {
                 // Not sure why we sometimes end up here.
                 // Examples: bitflags block2 objc2 objc2_app_kit memoffset rustix
@@ -90,7 +64,7 @@ impl Checker {
                 // But we cannot parse these files, so we just ignore them
             } else {
                 let did_print =
-                    self.add_artifact(output, package, artifact, file_path, crate_info, verbose)?;
+                    self.add_artifact(output, package, artifact, file_path, set, verbose)?;
                 if !did_print {
                     output.num_artifacts_passed += 1;
                 }
@@ -110,7 +84,7 @@ impl Checker {
         package: &Package,
         artifact: &Artifact,
         bin_path: &Utf8Path,
-        crate_info: Option<&CrateInfo>,
+        crate_info: Option<&DepKindSet>,
         verbose: bool,
     ) -> anyhow::Result<bool> {
         let crate_name = CrateName::new(package.name.to_string())?;
@@ -188,7 +162,7 @@ impl Checker {
             } else if artifact.target.kind.contains(&TargetKind::ProcMacro) {
                 " (proc-macro)".to_owned()
             } else if let Some(crate_info) = crate_info {
-                if crate_info.kind.contains(&CrateKind::Normal) {
+                if crate_info.kind.contains(&DepKind::Normal) {
                     String::new() // Not worth mentioning
                 } else {
                     format!(" ({})", crate_info.kind.iter().join(", "))
@@ -345,26 +319,21 @@ fn as_relative_path(path: &Utf8Path) -> &Utf8Path {
     }
 }
 
-/// Filter capabilities by removing ignored ones and handling the Any capability.
-/// If the set includes Any, remove everything but Any.
+/// Filter capabilities by removing allowed ones, keeping only the non-allowed ones.
 fn filter_capabilities(actual_caps: &CapabilitySet, allowed_caps: &CapabilitySet) -> CapabilitySet {
     if allowed_caps.contains(&Capability::Any) {
-        return Default::default();
-    }
-
-    // If Any is present, return only Any (regardless of ignored caps)
-    if actual_caps.contains(&Capability::Any) {
+        CapabilitySet::default()
+    } else if actual_caps.contains(&Capability::Any) {
         let mut result = CapabilitySet::new();
         result.insert(Capability::Any);
-        return result;
+        result
+    } else {
+        actual_caps
+            .iter()
+            .filter(|cap| !allowed_caps.contains(cap))
+            .copied()
+            .collect()
     }
-
-    // Otherwise, filter out ignored capabilities
-    actual_caps
-        .iter()
-        .filter(|cap| !allowed_caps.contains(cap))
-        .copied()
-        .collect()
 }
 
 fn deduce_caps_of_binary(path: &Utf8Path) -> anyhow::Result<DeducedCapabilities> {

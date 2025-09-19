@@ -13,14 +13,25 @@ rules: [
 		// These crates are allowed to have build.rs files
 		// TODO: it would be nice to be able to specify the capabilities of build.rs files
 		caps: ["build.rs"]
-		crates: ["*"] // TODO: opt-in to afew
+		crates: ["*"] // TODO: opt-in to a few
 	}
 	{
 		// These crates are allowed to access files:
 		caps: ["fs"]
 		crates: [
+			"ariadne"
+			"camino"
+			"eon_syntax"
 			"eon"
 			"url"
+		]
+	}
+	{
+		// These crates are allowed everything
+		caps: ["*"]
+		crates: [
+			"cargo-caps"
+			"cargo-metadata"
 		]
 	}
 ]

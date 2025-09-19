@@ -28,7 +28,7 @@ This will build your local project, and while doing so, print the capabilities o
 Run cargo-caps on self:
 
 ```bash
-cargo run -p cargo-caps -- check
+cargo run -- check
 ```
 
 
