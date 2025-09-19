@@ -1,6 +1,7 @@
 use cargo_metadata::camino::Utf8PathBuf;
 
 use crate::{
+    cap_rule::SymbolRules,
     capability::{Capability, DeducedCapabilities},
     reservoir_sample::ReservoirSampleExt as _,
 };
@@ -29,13 +30,15 @@ impl CapsCommand {
             anyhow::bail!("Binary file does not exist: {}", self.binary_path);
         }
 
+        let rules = SymbolRules::load_default();
+
         // Extract symbols from the binary
         let symbols = crate::extract_symbols(&self.binary_path)?;
         let filtered_symbols =
             crate::filter_symbols(symbols, self.include_local, self.include_all_kinds);
 
         // Analyze capabilities
-        let capabilities = DeducedCapabilities::from_symbols(filtered_symbols)?;
+        let capabilities = DeducedCapabilities::from_symbols(&rules, filtered_symbols)?;
 
         // Print results
         self.print_capabilities(&capabilities);

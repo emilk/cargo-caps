@@ -12,6 +12,7 @@ use itertools::Itertools as _;
 
 use crate::{
     build_graph_analysis::DepKindSet,
+    cap_rule::SymbolRules,
     checker::{Checker, CheckerOutput},
     config::WorkspaceConfig,
 };
@@ -87,6 +88,7 @@ impl CheckCommand {
         let reader = BufReader::new(stdout);
 
         let checker = Checker {
+            rules: SymbolRules::load_default(),
             config,
             metadata,
             show_empty: self.show_empty,

@@ -34,9 +34,26 @@ pub struct Rule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Rules {
+pub struct SymbolRules {
     /// Most specific match wins! So if `foo::bar` matches, then `foo` is ignored.
     pub rules: Vec<Rule>,
+}
+
+impl SymbolRules {
+    pub fn load_default() -> Self {
+        static DEFAULT_RULES_EON: &str = include_str!("default_rules.eon");
+
+        #[derive(serde::Deserialize)]
+        struct DefaultRules {
+            rules: Vec<SerializedRule>,
+        }
+
+        let loaded: DefaultRules =
+            eon::from_str(DEFAULT_RULES_EON).expect("Failed to parse default_rules.eon");
+        Self {
+            rules: loaded.rules.into_iter().map(|rule| rule.into()).collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,7 +78,7 @@ impl From<SerializedRule> for Rule {
     }
 }
 
-impl Rules {
+impl SymbolRules {
     /// Find the most specific matching rule for a symbol
     pub fn match_symbol(&self, symbol: &str) -> Option<&CapabilitySet> {
         let mut best_match: Option<(&Rule, usize)> = None;
@@ -96,24 +113,9 @@ impl Rules {
     }
 }
 
-pub fn default_rules() -> Rules {
-    static DEFAULT_RULES_EON: &str = include_str!("default_rules.eon");
-
-    #[derive(serde::Deserialize)]
-    struct DefaultRules {
-        rules: Vec<SerializedRule>,
-    }
-
-    let loaded: DefaultRules =
-        eon::from_str(DEFAULT_RULES_EON).expect("Failed to parse default_rules.eon");
-    Rules {
-        rules: loaded.rules.into_iter().map(|rule| rule.into()).collect(),
-    }
-}
-
 #[test]
 fn test_default_rules() {
-    let rules = default_rules();
+    let rules = SymbolRules::load_default();
     assert_eq!(rules.match_symbol("unknown"), None);
     // TODO: more sanity checking
 }

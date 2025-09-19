@@ -3,11 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    CrateName, Symbol,
-    cap_rule::{Rules, default_rules},
-    symbol::FunctionOrPath,
-};
+use crate::{CrateName, Symbol, cap_rule::SymbolRules, symbol::FunctionOrPath};
 
 pub type CapabilitySet = BTreeSet<Capability>;
 
@@ -93,7 +89,7 @@ impl Capability {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DeducedCapabilities {
     /// The known capabilities of this crate
     pub own_caps: BTreeMap<Capability, Reasons>,
@@ -106,21 +102,6 @@ pub struct DeducedCapabilities {
 
     /// We need to resolve these crates to see what their capabilities are
     pub unknown_crates: BTreeMap<CrateName, BTreeSet<Symbol>>,
-
-    /// Rules for matching symbols to capabilities
-    rules: Rules, // TODO: move out somewhere else
-}
-
-impl Default for DeducedCapabilities {
-    fn default() -> Self {
-        Self {
-            own_caps: Default::default(),
-            known_crates: Default::default(),
-            unknown_symbols: Default::default(),
-            unknown_crates: Default::default(),
-            rules: default_rules(),
-        }
-    }
 }
 
 /// Why do we have this capability?
@@ -129,10 +110,13 @@ pub type Reasons = BTreeSet<Reason>;
 pub type Reason = Symbol;
 
 impl DeducedCapabilities {
-    pub fn from_symbols(symbols: impl IntoIterator<Item = Symbol>) -> anyhow::Result<Self> {
+    pub fn from_symbols(
+        rules: &SymbolRules,
+        symbols: impl IntoIterator<Item = Symbol>,
+    ) -> anyhow::Result<Self> {
         let mut slf = Self::default();
         for symbol in symbols {
-            slf.add(&symbol)?;
+            slf.add(rules, &symbol)?;
         }
         Ok(slf)
     }
@@ -143,7 +127,6 @@ impl DeducedCapabilities {
             known_crates,
             unknown_symbols,
             unknown_crates,
-            rules: _,
         } = self;
 
         let mut total = BTreeSet::default();
@@ -168,14 +151,14 @@ impl DeducedCapabilities {
     }
 
     /// Capability from symbol
-    fn add(&mut self, symbol: &Symbol) -> anyhow::Result<()> {
+    fn add(&mut self, rules: &SymbolRules, symbol: &Symbol) -> anyhow::Result<()> {
         for path in symbol.paths() {
             match path {
                 FunctionOrPath::Function(fun_name) => {
                     let fun_name = fun_name.trim_start_matches('_');
 
                     // Check rules for the symbol
-                    if let Some(capabilities) = self.rules.match_symbol(fun_name) {
+                    if let Some(capabilities) = rules.match_symbol(fun_name) {
                         for &capability in capabilities {
                             self.own_caps
                                 .entry(capability)
@@ -190,7 +173,7 @@ impl DeducedCapabilities {
                 FunctionOrPath::RustPath(rust_path) => {
                     let path_str = rust_path.to_string();
                     // Check rules for the path
-                    if let Some(capabilities) = self.rules.match_symbol(&path_str) {
+                    if let Some(capabilities) = rules.match_symbol(&path_str) {
                         for &capability in capabilities {
                             self.own_caps
                                 .entry(capability)

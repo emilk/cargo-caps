@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     CrateName,
     build_graph_analysis::{DepKind, DepKindSet, has_build_rs},
+    cap_rule::SymbolRules,
     capability::{Capability, CapabilitySet, DeducedCapabilities},
     config::WorkspaceConfig,
     reservoir_sample::ReservoirSampleExt as _,
@@ -10,7 +11,7 @@ use crate::{
 use cargo_metadata::{Artifact, Metadata, Package, PackageId, TargetKind, camino::Utf8Path};
 use itertools::Itertools as _;
 
-/// What the checker computers
+/// What [`Checker`] computers
 #[derive(Default)]
 pub struct CheckerOutput {
     pub crate_caps: HashMap<CrateName, BTreeMap<TargetKind, DeducedCapabilities>>,
@@ -18,6 +19,8 @@ pub struct CheckerOutput {
 }
 
 pub struct Checker {
+    /// Rules for matching symbols to capabilities
+    pub rules: SymbolRules,
     pub config: WorkspaceConfig,
     pub metadata: Metadata,
     pub show_empty: bool,
@@ -91,7 +94,7 @@ impl Checker {
 
         let allowed_caps = self.config.crate_caps(&crate_name);
 
-        let mut deduced_caps = deduce_caps_of_binary(bin_path)?;
+        let mut deduced_caps = deduce_caps_of_binary(&self.rules, bin_path)?;
 
         debug_assert_eq!(
             artifact.target.kind.len(),
@@ -336,8 +339,11 @@ fn filter_capabilities(actual_caps: &CapabilitySet, allowed_caps: &CapabilitySet
     }
 }
 
-fn deduce_caps_of_binary(path: &Utf8Path) -> anyhow::Result<DeducedCapabilities> {
+fn deduce_caps_of_binary(
+    rules: &SymbolRules,
+    path: &Utf8Path,
+) -> anyhow::Result<DeducedCapabilities> {
     let symbols = crate::extract_symbols(path)?;
     let filtered_symbols = crate::filter_symbols(symbols, false, false);
-    DeducedCapabilities::from_symbols(filtered_symbols)
+    DeducedCapabilities::from_symbols(rules, filtered_symbols)
 }
