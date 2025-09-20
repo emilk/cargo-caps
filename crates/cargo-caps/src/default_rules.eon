@@ -10,7 +10,10 @@ rules: [
 			// NOTE: cargo-caps ignores leading underscores
 			// Simple memory stuff:
 			".memset_pattern.*"
+			"abort"
 			"bzero"
+			"error"
+			"memchr"
 			"memcmp"
 			"memcpy"
 			"memmove"
@@ -18,21 +21,22 @@ rules: [
 			"memset"
 			"strcmp"
 			"strcpy"
-			"strlen"
-			"abort"
-			"error"
-			"std::sys::pal::unix::os::errno"
 			"strerror_r"
+			"strlen"
 
 			// Math:
 			"acos"
 			"acosf"
+			"asin"
+			"asinf"
 			"atan2"
 			"atan2f"
 			"cbrt"
 			"cbrtf"
 			"cos"
 			"cosf"
+			"cosh"
+			"coshf"
 			"exp"
 			"exp10"
 			"exp10f"
@@ -57,6 +61,8 @@ rules: [
 			"sincos_stret"
 			"sincosf_stret"
 			"sinf"
+			"sinh"
+			"sinhf"
 			"tan"
 			"tanf"
 			"pthread_cond_*"
@@ -79,6 +85,10 @@ rules: [
 			"CCRandomGenerateBytes"
 			"getentropy"
 			"rustc_proc_macro_decls_*"
+
+			// get/set flaoting point rounding mode
+			"fegetround"
+			"fesetround"
 
 			// From https://gcc.gnu.org/onlinedocs/gccint/Soft-float-library-routines.html
 			"__addsf3"
@@ -298,6 +308,7 @@ rules: [
 			"std::sys::pal::unix::abort_internal*"
 			"std::sys::pal::unix::decode_error_kind"
 			"std::sys::pal::unix::decode_error_kind"
+			"std::sys::pal::unix::os::errno"
 			"std::sys::pal::unix::sync::*"
 			"std::sys::process::unix::common::cstring_array::*"
 			"std::sys::random::*" // TODO: consider adding special capability for random
@@ -335,6 +346,7 @@ rules: [
 		patterns: [
 			"std::env::*"
 			"std::sys::backtrace::*"
+			"std::sys::env::*"
 			"std::sys::io::is_terminal::*"
 		]
 	}
@@ -363,23 +375,27 @@ rules: [
 			"std::path::*"
 			"std::sys::fs::*"
 			"std::sys::pal::unix::fs::*"
+			"std::sys::path::*"
 		]
 	}
 	{
 		caps: ["alloc", "panic", "net"]
-		patterns: ["std::net::*", "std::sys::net::*"]
+		patterns: [
+			"std::net::*"
+			"std::sys::net::*"
+			"std::os::unix::net::*"
+		]
 	}
 	{
 		caps: ["alloc", "panic", "time"]
 		patterns: [
-			"std::time::*"
+			"CFTimeZone*",
 			"std::sys::pal::unix::time::*"
-			"CFTimeZoneGetName"
-			"CFTimeZoneCopySystem"
+			"std::time::*"
 		]
 	}
 	{
-		// TODO: categorize the rest of std:: :}
+		// TODO: categorize the rest of std:: :)
 		caps: [
 			"*" // conservatively assume the worst
 		]

@@ -25,7 +25,6 @@ mod demangle;
 mod print;
 mod reservoir_sample;
 mod rust_path;
-mod rust_type;
 mod symbol;
 mod tree;
 

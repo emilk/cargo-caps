@@ -108,7 +108,7 @@ impl Checker {
             artifact_kind,
             &TargetKind::CustomBuild | &TargetKind::ProcMacro
         ) {
-            // build.rs files and proc-macros are binaries with a main function and evertyhing.
+            // build.rs files and proc-macros are binaries with a main function and everything.
             // There is very little they can't do.
             // So they will always be sus
             return Ok(false);

@@ -7,7 +7,13 @@ rules: [
 	{
 		// Capabilities all crates are allowed:
 		crates: ["*"]
-		caps: ["alloc", "panic", "stdio", "sysinfo", "time"]
+		caps: [
+			"alloc"
+			"panic"
+			"stdio"
+			"sysinfo"
+			"time"
+		]
 	}
 	{
 		// These crates are allowed to have build.rs files
@@ -29,9 +35,6 @@ rules: [
 	{
 		// These crates are allowed everything
 		caps: ["*"]
-		crates: [
-			"cargo-caps"
-			"cargo-metadata"
-		]
+		crates: ["cargo-caps", "cargo-metadata"]
 	}
 ]

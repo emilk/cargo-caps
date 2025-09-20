@@ -129,7 +129,7 @@ impl DepGraph {
                 .packages
                 .iter()
                 .find(|p| p.id == package_id)
-                .ok_or_else(|| anyhow::anyhow!("Package not found: {:?}", package_id))?;
+                .ok_or_else(|| anyhow::anyhow!("Package not found: {package_id:?}"))?;
 
             for dep in &package.dependencies {
                 // Find the dependency package
@@ -260,10 +260,10 @@ fn dependency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTr
                 // A normal dependency inherits dependent's kind:
                 (DepKind::Normal, crate_kind) => crate_kind,
 
-                // All dependencies of a build-dependency are marked build-dependenices:
+                // All dependencies of a build-dependency are marked build-dependencies:
                 (DepKind::Build, _) => DepKind::Build,
 
-                // All dependencies of a dev-dependency are marked dev-dependenices:
+                // All dependencies of a dev-dependency are marked dev-dependencies:
                 (DepKind::Dev, _) => DepKind::Dev,
 
                 // All dependencies of a proc-macros are marked proc-macros:

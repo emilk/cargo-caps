@@ -1,49 +1,55 @@
 use std::fmt;
 use std::ops::Deref;
-
 /// A Rust module or item path like `std::collections::Vec` or `my_crate::module::function`.
 ///
 /// This struct encapsulates a path string and provides utilities for working with
 /// Rust-style paths that use `::` as separators.
-///
-/// # Examples
-///
-/// ```
-/// use cargo_caps::rust_path::RustPath;
-///
-/// let path = RustPath::new("std::collections::Vec");
-/// assert_eq!(path.as_str(), "std::collections::Vec");
-/// assert_eq!(path.segments(), vec!["std", "collections", "Vec"]);
-/// ```
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RustPath(String);
 
 impl RustPath {
     /// Creates a new `RustPath` from a string.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use cargo_caps::rust_path::RustPath;
-    ///
-    /// let path = RustPath::new("std::io::cursor::Cursor<T>");
-    /// assert_eq!(path.as_str(), "std::io::cursor::Cursor<T>");
-    /// ```
     pub fn new(path: impl Into<String>) -> Self {
         let path = path.into();
         Self(path)
     }
 
+    /// Finds all `RustPath`:s in the given string with at least two segments.
+    ///
+    /// Ignores matches that are prefixed by `>::` (like in `<Foo as Bar>::foo::bar`)
+    pub fn find_all_with_at_least_two_segments_in(input: &str) -> Vec<Self> {
+        if !input.contains("::") {
+            return vec![]; // Early-out
+        }
+
+        use std::sync::LazyLock;
+
+        // Compile the regex once at program startup
+        static PATH_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
+            regex::RegexBuilder::new(
+                r"
+                \b
+                    [A-Za-z_][A-Za-z0-9_]*      # identifier
+                    (?:                         # non-capturing group
+                        ::                      #   ::
+                        [A-Za-z_][A-Za-z0-9_]*  #   identifier
+                    )+                          # at least one ::
+                \b",
+            )
+            .ignore_whitespace(true)
+            .unicode(false)
+            .build()
+            .unwrap()
+        });
+
+        PATH_REGEX
+            .find_iter(input)
+            .filter(|m| !input[..m.start()].ends_with(">::"))
+            .map(|m| Self::new(m.as_str()))
+            .collect()
+    }
+
     /// Returns the path as a string slice.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use cargo_caps::rust_path::RustPath;
-    ///
-    /// let path = RustPath::new("core::mem::size_of");
-    /// assert_eq!(path.as_str(), "core::mem::size_of");
-    /// ```
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -51,18 +57,6 @@ impl RustPath {
     /// Splits the path into its segments (parts separated by `:::`).
     ///
     /// Returns an empty vector if the path is empty.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use cargo_caps::rust_path::RustPath;
-    ///
-    /// let path = RustPath::new("std::collections::Vec");
-    /// assert_eq!(path.segments(), vec!["std", "collections", "Vec"]);
-    ///
-    /// let empty = RustPath::new("");
-    /// assert_eq!(empty.segments(), Vec::<&str>::new());
-    /// ```
     pub fn segments(&self) -> Vec<&str> {
         if self.0.is_empty() {
             Vec::new()
@@ -104,6 +98,12 @@ impl From<&str> for RustPath {
     }
 }
 
+impl From<RustPath> for String {
+    fn from(path: RustPath) -> Self {
+        path.0
+    }
+}
+
 impl PartialEq<str> for RustPath {
     fn eq(&self, other: &str) -> bool {
         self.0 == other
@@ -130,6 +130,8 @@ impl PartialEq<RustPath> for &str {
 
 #[cfg(test)]
 mod tests {
+    use crate::demangle::demangle_symbol;
+
     use super::*;
 
     #[test]
@@ -188,5 +190,70 @@ mod tests {
         // &str == RustPath
         assert_eq!("std::collections::Vec", path);
         assert_ne!("different::path", path);
+    }
+
+    #[test]
+    fn test_path_finding() {
+        let tests = vec![
+            (
+                "__ZN66_$LT$std..io..cursor..Cursor$LT$T$GT$$u20$as$u20$std..io..Read$GT$4read17h3955760825c0713eE",
+                vec!["std::io::cursor::Cursor", "std::io::Read"],
+            ),
+            (
+                "_<dyn core..any..Any>::is::h10782f44127ca60f",
+                vec!["core::any::Any"], // TODO
+            ),
+            (
+                "<T as <std::OsString as core::From<&T>>::SpecToOsString>::spec_to_os_string",
+                vec!["std::OsString", "core::From"],
+            ),
+            (
+                "<std..io..cursor..Cursor<T> as std..io..Read>::read_exact",
+                vec!["std::io::cursor::Cursor", "std::io::Read"],
+            ),
+            (
+                "<<alloc..btree..map..IntoIter<K,V,A> as core..Drop>..drop..DropGuard<K,V,A> as core..Drop>::drop",
+                vec!["alloc::btree::map::IntoIter", "core::Drop", "core::Drop"],
+            ),
+            (
+                "<<alloc..collections..btree..map..IntoIter<K,V,A> as core..ops..drop..Drop>..drop..DropGuard<K,V,A> as core..ops..drop..Drop>::drop",
+                vec![
+                    "alloc::collections::btree::map::IntoIter",
+                    "core::ops::drop::Drop",
+                    "core::ops::drop::Drop",
+                ],
+            ),
+            (
+                "<(A,B) as core::ops::range::RangeBounds<T>>::start_bound",
+                vec!["core::ops::range::RangeBounds"],
+            ),
+            (
+                "<[core::mem::maybe_uninit::MaybeUninit<T>] as core::array::iter::iter_inner::PartialDrop>::partial_drop",
+                vec![
+                    "core::mem::maybe_uninit::MaybeUninit",
+                    "core::array::iter::iter_inner::PartialDrop",
+                ],
+            ),
+            (
+                "__ZN77_$LT$$RF$$u5b$syn..attr..Attribute$u5d$$u20$as$u20$syn..attr..FilterAttrs$GT$5outer17h1d80fb5ca49672feE",
+                vec!["syn::attr::Attribute", "syn::attr::FilterAttrs"],
+            ),
+            (
+                r#"<extern "C" fn(&T,objc::runtime::Sel) -> R as objc::declare::MethodImplementation>::imp"#,
+                vec!["objc::runtime::Sel", "objc::declare::MethodImplementation"],
+            ),
+            (
+                "<[(K,V); N] as axum_core::response::into_response::IntoResponse>::into_response",
+                vec!["axum_core::response::into_response::IntoResponse"],
+            ),
+        ];
+
+        for (mangled, expected_paths) in tests {
+            let demangled = demangle_symbol(mangled);
+            // let paths = FunctionOrPath::from_demangled(&demangled);
+            // let paths: Vec<_> = paths.into_iter().map(|p| p.to_string()).collect();
+            let paths = RustPath::find_all_with_at_least_two_segments_in(&demangled);
+            assert_eq!(paths, expected_paths, "{demangled} ({mangled})");
+        }
     }
 }

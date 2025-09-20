@@ -2,6 +2,11 @@
 
 A Rust tool for auditing and analyzing the capabilities of Rust crates based on the symbols they link to.
 
+Say a the popular (and fictitious) crate `super_nice_xml_parser` gets compromised by some evil actor and now mines bitcoins and sends them to some server.
+Anyone depending on that crate (directly or indirectly) would be vulnerable.
+But running `cargo-caps check` you get an error (on CI or locally),
+and in the output you see that the `super_nice_xml_parser` crate suddenly has new capabilities of `thread` and `net`.
+
 ## Warning
 Only tested on macOS.
 Some of the code was AI generated and has not yet been vetted by human eyes.
@@ -9,64 +14,53 @@ Half-finished.
 Not ready for production.
 
 ## Installation
-`cargo install --path ./crates/cargo-caps/`
-
-TODO: publish `cargo-caps` on crates.io
-
+`cargo install cargo-caps --locked`
 
 ## Run it
 Make sure you're in the root of a cargo project, then run:
+
+> `cargo-caps init`
+
+This creates a `cargo-caps.eon` file where you can specify what crates are allowed what capabilities.
+Next run:
 
 > `cargo-caps check`
 
 This will build your local project, and while doing so, print the capabilities of each crate it depends on, directly or indirectly.
 
-// TODO: show example output
-
-## Test it
-
-Run cargo-caps on self:
-
-```bash
-cargo run -- check
-```
-
-
 ## What is `cargo-caps` for?
-Any package manager like `cargo` has a _trust_ issue.
+Any package manager like `cargo` is vulnerable to supply chain attacks.
 You want to add that nice 3rd party crate, but to do so you must trust it, and all the other transitive dependencies it pulls in.
+And you must also trust future update whenever you run `cargo update`.
+
 You can read their source code, but that's a LOT of work, and so you don't.
 
 Enter `cargo-deny`.
 `cargo-deny` will verify what a crate is capable and incapble of.
 
-Worried the crate will spawn a thread? It can't, unless it has the `thread` capability.
-Worried it will read your files, or mess with your filesystem? It can't without the `fs` capability.
+Worried a create will read your files, or mess with your filesystem? It can't without the `fs` capability.
 Worried it will communicate with nefarious actors over the inernet? Better check whether or not it has the `net` capability!
 
-The plan is that you should have a `cargo-deny` config file in your repository where you can specify what capabilities each crate you depend on is allowed.
-If a crate uses more than it is allowed, you will get a failure when running `cargo-deny check`.
-
-To keep the config file short you can add some base level of capabilities that you always allow.
-For instance, you may allow all crates to `panic`, `alloc` memory and tell the `time`, but anything beyond that you must allow-list explicitly.
+You can configure exactly what each dependency is allowed in a `cargo-deny.eon` config file in your repository.
+You can then run `cargo-deny check` to check if any dependency does more than it is allowed to.
 
 ## How it works
-`cargo-caps check` will compile your code and all its dependencies (like `cargo build`) and then analyze the linker symbols.
+`cargo-caps check` will run `cargo build` and then analyze the linker symbols of each built library.
 Based on these symbols `cargo-caps` will then infer _capabilities_ of each library.
 
-For instance: if a crate links with symbols `std::net::` then `cargo-deny` infers that the crate has the capability to communicate over network.
+For instance: if a crate links with symbols in `std::net::` then `cargo-deny` infers that the crate has the capability to communicate over network.
 
 See [`default_rules.ron`](crates/cargo-caps/src/default_rules.ron) for how different symbols are categorized.
 
-Any unknown symbol will lead to the crate being assigned the capability of `any`, which is the conservative and safe thing to do.
-TODO: consider splitting out `unknown` and `any`.
+Any unknown symbol will lead to the crate being assigned the capability of `any` (fail-safe).
 
+TODO: consider splitting out an `unknown` capability from `any`.
 
 ## Capabilities
 `cargo-caps` currently can distinguish between the following capabilities:
 - `alloc` - allocate memory (applied to everything in `std`)
 - `panic` - can cause a `panic!` (applied to everything in `std`)
-- `time` - measuring time and telling current time
+- `time` - measuring time and telling the current time
 - `sysinfo` - reading environment variables, process info, …
 - `stdio` - read/write stdin/stdout/stderr
 - `thread` - spawn threads
@@ -74,8 +68,8 @@ TODO: consider splitting out `unknown` and `any`.
 - `fs` - filesystem access (read and/or write)
 - `any` - can do anything
 
-Things that will get a crate put in the `all` bucket includes calling into an opaque library, or starting another process.
-Using any symbol not yet categorized in [`default_rules.ron`](crates/cargo-caps/src/default_rules.ron) will also put you in the `all` bucket.
+Things that will get a crate put in the `any` bucket includes calling into an opaque library, or starting another process.
+Using any symbol not yet categorized in [`default_rules.ron`](crates/cargo-caps/src/default_rules.ron) will also put you in the `any` bucket.
 
 
 ## Limitations
@@ -87,7 +81,7 @@ If you want this sort of fine-grained capabilities, I suggest you take a look at
 Perhaps only a single function in a crate uses the file system, and you aren't calling that.
 The crate will still be labeles as using the `fs` capability.
 
-`cargo-deny` is not perfect, but it is better than the status quo.
+`cargo-deny` is not perfect, but it can still be a useful layer of defence.
 
 
 ## Details
@@ -113,3 +107,11 @@ Another example: `ffmpeg-sidecar` is a crate that starts and controls an `ffmpeg
 If you trust ffmpeg not to do any shenanigans, then you could sign `ffmpeg-sidecar` to be excluded from `net` and `fs` capbilties.
 
 Currently a Rust developer ha to verify _all_ dependencies it pulls in (even transitive ones!), but with cargo-caps you only need to trust these (hopefully few) _edge_ crates.
+
+## Developing
+
+Run cargo-caps on self:
+
+```bash
+cargo run --release -- check
+```

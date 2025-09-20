@@ -1,8 +1,6 @@
 use std::fmt;
 
-use crate::{
-    demangle::demangle_symbol, print::PrintOptions, rust_path::RustPath, rust_type::TraitFnImpl,
-};
+use crate::{demangle::demangle_symbol, print::PrintOptions, rust_path::RustPath};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SymbolScope {
@@ -94,17 +92,13 @@ impl FunctionOrPath {
             } else {
                 panic!("Weird symbol: {demangled:?}"); // TODO
             }
-        } else if let Ok(trait_impl) = TraitFnImpl::parse(demangled) {
-            trait_impl
-                .paths()
-                .into_iter()
-                .filter(|path| path.segments().len() > 1) // Probably a built-in type or generic
-                .map(FunctionOrPath::RustPath)
-                .collect()
-        } else if demangled.contains("::") {
-            vec![Self::RustPath(RustPath::new(demangled))]
         } else {
-            vec![Self::Function(demangled.to_owned())]
+            let paths = RustPath::find_all_with_at_least_two_segments_in(demangled);
+            if paths.is_empty() {
+                vec![Self::Function(demangled.to_owned())]
+            } else {
+                paths.into_iter().map(FunctionOrPath::RustPath).collect()
+            }
         }
     }
 }

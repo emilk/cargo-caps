@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{rust_path::RustPath, rust_type::TraitFnImpl, symbol::Symbol};
+use crate::{rust_path::RustPath, symbol::Symbol};
 
 #[derive(Debug, Clone)]
 pub enum Tree {
@@ -85,45 +85,38 @@ pub fn tree_from_symbols(symbols: &[Symbol]) -> Tree {
                 symbol.demangled = demangled[end_bracket + 3..].to_owned();
             }
             insert_leaf(category, &symbol);
-        } else if let Ok(trait_impl) = TraitFnImpl::parse(demangled) {
-            for path in trait_impl.paths() {
-                let segments = path.segments();
-                if segments.len() <= 1 {
-                    // Probably a built-in type, like [T]
+        } else {
+            let paths = RustPath::find_all_with_at_least_two_segments_in(demangled);
+            if paths.is_empty() {
+                let category = get_or_create_category(&mut root, "system");
+                let name = &symbol.demangled;
+                let system_category = if name.starts_with("GCC_except_table") {
+                    "GCC_except_table"
+                } else if name.starts_with("lCPI") {
+                    // local Constant Pool Identifier
+                    "lCPI"
+                } else if name.starts_with("ltmp") {
+                    "ltmp"
+                } else if let Some(dot_pos) = name.find('.') {
+                    // Extract prefix before first dot, or use the entire name if no dot
+                    &name[..dot_pos]
                 } else {
-                    let crate_name = segments[0];
-                    let category = crate_category(&mut root, crate_name);
-                    insert_symbol_into_tree(category, &segments, symbol.clone());
+                    name
+                };
+                let sub_category = get_or_create_category(category, system_category);
+                insert_leaf(sub_category, &symbol);
+            } else {
+                for path in paths {
+                    let segments = path.segments();
+                    if segments.len() <= 1 {
+                        // Probably a built-in type, like [T]
+                    } else {
+                        let crate_name = segments[0];
+                        let category = crate_category(&mut root, crate_name);
+                        insert_symbol_into_tree(category, &segments, symbol.clone());
+                    }
                 }
             }
-        } else if demangled.contains("::") {
-            let path = RustPath::new(demangled);
-            let segments = path.segments();
-            debug_assert!(
-                segments.len() > 1,
-                "Rust path should have more than one segment"
-            );
-            let crate_name = segments[0];
-            let category = crate_category(&mut root, crate_name);
-            insert_symbol_into_tree(category, &segments, symbol.clone());
-        } else {
-            let category = get_or_create_category(&mut root, "system");
-            let name = &symbol.demangled;
-            let system_category = if name.starts_with("GCC_except_table") {
-                "GCC_except_table"
-            } else if name.starts_with("lCPI") {
-                // local Constant Pool Identifier
-                "lCPI"
-            } else if name.starts_with("ltmp") {
-                "ltmp"
-            } else if let Some(dot_pos) = name.find('.') {
-                // Extract prefix before first dot, or use the entire name if no dot
-                &name[..dot_pos]
-            } else {
-                name
-            };
-            let sub_category = get_or_create_category(category, system_category);
-            insert_leaf(sub_category, &symbol);
         }
     }
 
