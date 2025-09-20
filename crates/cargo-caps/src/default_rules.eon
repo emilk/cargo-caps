@@ -289,10 +289,16 @@ rules: [
 	{
 		caps: ["alloc", "panic"]
 		patterns: [
+			"CFRelease"
+			"CFStringGetBytes"
+			"CFStringGetCStringPtr"
+			"CFStringGetLength"
+
 			"std::backtrace::*"
 			"std::collections::*"
 			"std::ffi::os_str::*"
 			"std::hash::*"
+			"std::os::fd::owned::OwnedFd"
 			"std::os::unix::ffi::os_str::*"
 			"std::panic::*"
 			"std::panicking::*"
@@ -304,6 +310,10 @@ rules: [
 			"std::process::abort*" // TODO: consider adding special capability for abort/exit
 			"std::process::exit*" // TODO: consider adding special capability for abort/exit
 			"std::sync::*"
+			"std::sys_common::backtrace::*"
+			"std::sys_common::once::*"
+			"std::sys_common::once"
+			"std::sys::common::thread_local::*",
 			"std::sys::os_str::*"
 			"std::sys::pal::unix::abort_internal*"
 			"std::sys::pal::unix::decode_error_kind"
@@ -314,16 +324,17 @@ rules: [
 			"std::sys::random::*" // TODO: consider adding special capability for random
 			"std::sys::sync::*"
 			"std::sys::thread_local::*"
+			"std::sys::unix::abort_internal" // TODO: consider adding special capability for abort/exit
+			"std::sys::unix::decode_error_kind"
 			"std::thread::current::current"
 			"std::thread::local::*"
+			"std::thread::park"
 			"std::thread::Thread::id"
 			"std::thread::ThreadId*"
-			"std::thread::park"
-			"std::os::fd::owned::OwnedFd"
-			"CFStringGetCStringPtr"
-			"CFRelease"
-			"CFStringGetBytes"
-			"CFStringGetLength"
+
+			"std::sys::log2f32" // math
+			"std::sys::log2f64" // math
+			"std::sys::log_wrapper" // math: https://stdrs.dev/nightly/x86_64-unknown-linux-gnu/std/sys/fn.log_wrapper.html
 
 			// I doubt these allocate, but 🤷
 			"std::char::*"

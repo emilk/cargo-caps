@@ -68,16 +68,7 @@ impl CheckCommand {
         // make sure all build.rs files are allow-listed
         // or we might be in danger!
 
-        let crate_infos = match self.calc_crate_kinds(&metadata) {
-            Ok(crate_infos) => Some(crate_infos),
-            Err(err) => {
-                println!(
-                    "Failed to analyze crate graph. cargo-deps won't understand if a dependency is a build-dependency, a dev-dependency, etc. Error: {err}"
-                );
-                println!();
-                None
-            }
-        };
+        let crate_infos = self.calc_crate_kinds(&metadata)?;
 
         let mut cmd = self.make_cargo_command();
 
@@ -87,11 +78,6 @@ impl CheckCommand {
 
         let stdout = child.stdout.take().unwrap();
         let reader = BufReader::new(stdout);
-
-        assert!(
-            metadata.resolve.is_some(),
-            "Missing resolved dependency graph"
-        );
 
         let checker = Checker {
             rules: SymbolRules::load_default(),
@@ -107,7 +93,7 @@ impl CheckCommand {
                 match message {
                     Message::CompilerArtifact(artifact) => {
                         checker
-                            .analyze_artifact(&mut output, crate_infos.as_ref(), verbose, &artifact)
+                            .analyze_artifact(&mut output, &crate_infos, verbose, &artifact)
                             .with_context(|| format!("target name: {}", artifact.target.name))?;
                     }
                     Message::CompilerMessage(compiler_message) => {
@@ -178,7 +164,15 @@ impl CheckCommand {
         };
 
         let sources = target_packages.iter().map(|p| p.id.clone()).collect_vec();
-        crate::build_graph_analysis::analyze_dependency_graph(metadata, &sources)
+        let resolve = match &metadata.resolve {
+            Some(resolve) => resolve,
+            None => {
+                anyhow::bail!("Missing resolved crate graph");
+            }
+        };
+        Ok(crate::build_graph_analysis::analyze_dependency_graph(
+            resolve, &sources,
+        ))
     }
 
     fn cargo_toml_path_of_package(crate_name: &str) -> anyhow::Result<Utf8PathBuf> {

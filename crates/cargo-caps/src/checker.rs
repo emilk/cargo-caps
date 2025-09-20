@@ -32,7 +32,7 @@ impl Checker {
     pub fn analyze_artifact(
         &self,
         output: &mut CheckerOutput,
-        crate_infos: Option<&HashMap<PackageId, DepKindSet>>,
+        crate_infos: &HashMap<PackageId, DepKindSet>,
         verbose: bool,
         artifact: &cargo_metadata::Artifact,
     ) -> Result<(), anyhow::Error> {
@@ -43,22 +43,18 @@ impl Checker {
             .find(|p| p.id == artifact.package_id)
             .unwrap(); // TODO
 
-        let set = if let Some(sets) = crate_infos {
-            if let Some(set) = sets.get(&artifact.package_id) {
-                if !set.kind.contains(&DepKind::Normal) {
-                    return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
-                }
-
-                Some(set)
-            } else {
-                // Not sure why we sometimes end up here.
-                // Examples: bitflags block2 objc2 objc2_app_kit memoffset rustix
-                // println!("ERROR: unknown crate {}", artifact.target.name);
-                return Ok(());
-                // None
+        let set = if let Some(set) = crate_infos.get(&artifact.package_id) {
+            if !set.kind.contains(&DepKind::Normal) {
+                return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
             }
+
+            set
         } else {
-            None
+            // Not sure why we sometimes end up here.
+            // Examples: bitflags block2 objc2 objc2_app_kit memoffset rustix
+            // println!("ERROR: unknown crate {}", artifact.target.name);
+            return Ok(());
+            // None
         };
 
         for file_path in &artifact.filenames {
@@ -89,7 +85,7 @@ impl Checker {
         package: &Package,
         artifact: &Artifact,
         bin_path: &Utf8Path,
-        crate_info: Option<&DepKindSet>,
+        dep_kinds: &DepKindSet,
         verbose: bool,
     ) -> anyhow::Result<bool> {
         let crate_name = CrateName::new(package.name.to_string())?;
@@ -191,16 +187,10 @@ impl Checker {
                 " (proc-macro)".to_owned()
             } else if artifact.target.kind.contains(&TargetKind::Bin) {
                 " (bin)".to_owned()
-            } else if let Some(crate_info) = crate_info {
-                if crate_info.kind.contains(&DepKind::Normal) {
-                    String::new() // Not worth mentioning
-                } else {
-                    format!(" ({})", crate_info.kind.iter().join(", "))
-                }
-            } else if artifact.target.kind.contains(&TargetKind::Lib) {
+            } else if dep_kinds.kind.contains(&DepKind::Normal) {
                 String::new() // Not worth mentioning
             } else {
-                format!(" ({})", artifact.target.kind.iter().join(", "))
+                format!(" ({})", dep_kinds.kind.iter().join(", "))
             }
         };
 
@@ -312,9 +302,7 @@ impl Checker {
             }
 
             println!("  Artifact kind: {artifact_kind}");
-            if let Some(crate_info) = crate_info {
-                println!("  Crate kind: {}", crate_info.kind.iter().join(", "));
-            }
+            println!("  Crate kind: {}", dep_kinds.kind.iter().join(", "));
 
             if artifact_kind != &TargetKind::CustomBuild && has_build_rs(package) {
                 let build_rs_caps = output

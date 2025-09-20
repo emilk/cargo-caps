@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
-use cargo_metadata::{DependencyKind, Metadata, Package, PackageId, TargetKind};
+use cargo_metadata::{DependencyKind, Package, PackageId};
 use petgraph::{Directed, graph::NodeIndex, visit::EdgeRef as _};
 
 /// How is the main target depending on a crate?
@@ -97,83 +97,41 @@ impl DepGraph {
         }
     }
 
-    pub fn add_edge(&mut self, dependent_: PackageId, dependency: PackageId, edge: Edge) {
-        let dependent = self.node_of(dependent_);
+    pub fn add_edge(&mut self, dependent: PackageId, dependency: PackageId, edge: Edge) {
+        let dependent = self.node_of(dependent);
         let dependency = self.node_of(dependency);
         self.graph.add_edge(dependent, dependency, edge);
     }
 
-    pub fn from_metadata(
-        metadata: &Metadata,
+    pub fn from_cargo_metadata(
+        resolve: &cargo_metadata::Resolve,
         starting_packages: &[PackageId],
-    ) -> anyhow::Result<Self> {
-        use std::collections::VecDeque;
-
+    ) -> Self {
         let mut graph = Self::default();
-
-        let mut queue = VecDeque::new();
-        let mut visited = std::collections::HashSet::new();
 
         // Add all starting packages to the queue
         for package_id in starting_packages {
-            if visited.insert(package_id.clone()) {
-                queue.push_back(package_id.clone());
-            }
-
             graph.insert_node(package_id, DepKind::Normal);
         }
 
-        while let Some(package_id) = queue.pop_front() {
-            // Find the package in metadata
-            let package = metadata
-                .packages
-                .iter()
-                .find(|p| p.id == package_id)
-                .ok_or_else(|| anyhow::anyhow!("Package not found: {package_id:?}"))?;
-
-            for dep in &package.dependencies {
-                // Find the dependency package
-                if let Some(dep_package) = metadata
-                    .packages
-                    .iter()
-                    .find(|p| p.name.as_str() == dep.name.as_str())
-                {
-                    // Create edge with dependency kind
-                    let mut edge_kind = BTreeSet::new();
-
-                    if dep_package
-                        .targets
-                        .iter()
-                        .all(|t| t.kind.iter().all(|k| k == &TargetKind::ProcMacro))
-                    {
-                        edge_kind.insert(DepKind::ProcMacro);
-                    } else {
-                        edge_kind.insert(match dep.kind {
-                            DependencyKind::Normal => DepKind::Normal,
-                            DependencyKind::Build => DepKind::Build,
-                            DependencyKind::Development => DepKind::Dev,
-                            DependencyKind::Unknown => DepKind::Unknown,
-                        });
-                    }
-
-                    if edge_kind.is_empty() {
-                        println!("WARNING: dependency edge has no kind");
-                    }
-
-                    let edge = Edge { kind: edge_kind };
-
-                    // Add edge from dependent to dependency
-                    graph.add_edge(package_id.clone(), dep_package.id.clone(), edge);
-
-                    // Add dependency to queue if not already visited
-                    if visited.insert(dep_package.id.clone()) {
-                        queue.push_back(dep_package.id.clone());
-                    }
+        for node in &resolve.nodes {
+            for dep in &node.deps {
+                let mut edge_kind = BTreeSet::new();
+                for kind in &dep.dep_kinds {
+                    edge_kind.insert(match kind.kind {
+                        DependencyKind::Normal => DepKind::Normal,
+                        DependencyKind::Build => DepKind::Build,
+                        DependencyKind::Development => DepKind::Dev,
+                        DependencyKind::Unknown => DepKind::Unknown,
+                    });
                 }
+                let edge = Edge { kind: edge_kind };
+
+                graph.add_edge(node.id.clone(), dep.pkg.clone(), edge);
             }
         }
 
-        Ok(graph)
+        graph
     }
 
     fn analyze(mut self) -> HashMap<PackageId, DepKindSet> {
@@ -239,10 +197,10 @@ impl DepGraph {
 }
 
 pub fn analyze_dependency_graph(
-    metadata: &Metadata,
+    resolve: &cargo_metadata::Resolve,
     sinks: &[PackageId],
-) -> anyhow::Result<HashMap<PackageId, DepKindSet>> {
-    Ok(DepGraph::from_metadata(metadata, sinks)?.analyze())
+) -> HashMap<PackageId, DepKindSet> {
+    DepGraph::from_cargo_metadata(resolve, sinks).analyze()
 }
 
 /// We are looking at a dependency.
