@@ -201,7 +201,7 @@ mod tests {
             ),
             (
                 "_<dyn core..any..Any>::is::h10782f44127ca60f",
-                vec!["core::any::Any"], // TODO
+                vec!["core::any::Any"],
             ),
             (
                 "<T as <std::OsString as core::From<&T>>::SpecToOsString>::spec_to_os_string",

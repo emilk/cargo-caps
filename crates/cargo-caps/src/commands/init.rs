@@ -7,6 +7,7 @@ use anyhow::Context as _;
 pub struct InitCommand;
 
 impl InitCommand {
+    #[expect(clippy::unused_self)]
     pub fn execute(self) -> anyhow::Result<()> {
         let config_path = Path::new("cargo-caps.eon");
 

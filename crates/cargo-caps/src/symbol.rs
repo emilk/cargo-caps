@@ -69,7 +69,10 @@ impl fmt::Display for SymbolKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FunctionOrPath {
+    /// C ABI
     Function(String),
+
+    /// Rust ABI
     RustPath(RustPath),
 }
 
@@ -88,6 +91,7 @@ impl FunctionOrPath {
             // Example: 'rustc[5224e6b81cd82a8f]::__rust_alloc'
             // Get part after `]::`:
             if let Some(end_bracket) = demangled.find("]::") {
+                // TODO: consider returning this as `rustc::__rust_alloc`
                 vec![Self::Function(demangled[end_bracket + 3..].to_owned())]
             } else {
                 panic!("Weird symbol: {demangled:?}"); // TODO

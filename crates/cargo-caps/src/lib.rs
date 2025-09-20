@@ -64,10 +64,13 @@ fn extract_symbols(binary_path: &Utf8Path) -> Result<Vec<Symbol>> {
                 .context("Failed to read object file from archive")?;
 
             // Parse the object file and extract symbols
-            if let Ok(file) = object::File::parse(&*obj_data) {
-                collect_file_symbols(&mut symbols, &file);
-            } else {
-                // TODO: Return error
+            match object::File::parse(&*obj_data) {
+                Ok(file) => {
+                    collect_file_symbols(&mut symbols, &file);
+                }
+                Err(err) => {
+                    anyhow::bail!("Failed to pearse entry in {binary_path:?}: {err}")
+                }
             }
         }
     } else {

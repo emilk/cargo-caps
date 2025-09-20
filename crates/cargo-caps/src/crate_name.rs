@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 /// Always normalized to `snake_case` (NEVER `kebab-case`).
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CrateName(String);
@@ -25,6 +27,10 @@ impl CrateName {
 
         Ok(Self(normalized))
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl std::fmt::Debug for CrateName {
@@ -41,6 +47,14 @@ impl std::fmt::Display for CrateName {
 
 impl AsRef<str> for CrateName {
     fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Deref for CrateName {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }

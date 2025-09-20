@@ -311,6 +311,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "TODO: fix graph analysis"]
     fn test_proc_macro() {
         let mut graph = DepGraph::default();
         graph.insert_node(&pid("binary"), DepKind::Normal);
@@ -328,25 +329,17 @@ mod tests {
         );
 
         let result = graph.analyze();
-
-        // TODO
-        // assert_eq!(&result[&pid("binary")], &set(CrateKind::Normal));
-        // assert_eq!(
-        //     &result[&pid("clap_derive")],
-        //     &set(CrateKind::ProcMacro)
-        // );
-        // assert_eq!(
-        //     &result[&pid("proc-macro2")],
-        //     &set(CrateKind::ProcMacro)
-        // );
+        assert_eq!(&result[&pid("binary")], &set(DepKind::Normal));
+        assert_eq!(&result[&pid("clap_derive")], &set(DepKind::ProcMacro));
+        assert_eq!(&result[&pid("proc-macro2")], &set(DepKind::ProcMacro));
     }
 
     #[test]
     fn test_proc_macro2() {
         let mut graph = DepGraph::default();
         graph.insert_node(&pid("binary"), DepKind::Normal);
-        // graph.insert_node(&pid("clap_derive"), CrateKind::Normal);
-        // graph.insert_node(&pid("proc-macro2"), CrateKind::Normal);
+        // graph.insert_node(&pid("clap_derive"), DepKind::Normal);
+        // graph.insert_node(&pid("proc-macro2"), DepKind::Normal);
         graph.add_edge(
             pid("binary"),
             pid("clap_derive"),

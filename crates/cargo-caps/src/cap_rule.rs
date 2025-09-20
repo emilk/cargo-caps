@@ -115,7 +115,11 @@ impl SymbolRules {
 
 #[test]
 fn test_default_rules() {
+    use crate::Capability;
     let rules = SymbolRules::load_default();
     assert_eq!(rules.match_symbol("unknown"), None);
-    // TODO: more sanity checking
+    assert_eq!(
+        rules.match_symbol("malloc"),
+        Some(&std::iter::once(Capability::Alloc).collect())
+    );
 }

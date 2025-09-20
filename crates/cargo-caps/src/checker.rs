@@ -8,7 +8,9 @@ use crate::{
     config::WorkspaceConfig,
     reservoir_sample::ReservoirSampleExt as _,
 };
-use cargo_metadata::{Artifact, Metadata, Package, PackageId, TargetKind, camino::Utf8Path};
+use cargo_metadata::{
+    Artifact, DependencyKind, Metadata, Package, PackageId, TargetKind, camino::Utf8Path,
+};
 use itertools::Itertools as _;
 
 /// What [`Checker`] computers
@@ -81,7 +83,7 @@ impl Checker {
     /// and a library.
     ///
     /// Returns `true` if we printed anything
-    pub fn add_artifact(
+    fn add_artifact(
         &self,
         output: &mut CheckerOutput,
         package: &Package,
@@ -114,17 +116,27 @@ impl Checker {
             return Ok(false);
         }
 
-        if true {
-            // We don't care about dependencies - we should have already have covered those.`
-            // TODO: veirfy that each unknown_crate is found in the cargo_metadata dependency list,
-            // or the symbol deducer might have a bug
-            deduced_caps.unknown_crates.clear();
-        } else {
-            deduced_caps.unknown_crates.remove(&crate_name); // we know ourselves
+        deduced_caps.unknown_crates.clear();
 
-            for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unknown_crates) {
+        let resolve = self.metadata.resolve.as_ref().unwrap();
+        let node = resolve
+            .nodes
+            .iter()
+            .find(|node| node.id == package.id)
+            .unwrap();
+        // for
+
+        // for dependency in &package.dependencies
+        for dependency in &node.deps {
+            if !dependency
+                .dep_kinds
+                .iter()
+                .any(|kind| kind.kind == DependencyKind::Normal)
+            {
+                let dep_crate_name = CrateName::new(dependency.name.clone())?;
                 if let Some(crate_caps) = output.crate_caps.get(&dep_crate_name) {
                     if let Some(dep_caps) = crate_caps.get(&TargetKind::Lib) {
+                        // If a dependency has a capability, then so do we!
                         deduced_caps
                             .known_crates
                             .entry(dep_crate_name)
@@ -138,11 +150,10 @@ impl Checker {
                         );
                     }
                 } else {
-                    // We depend on a crate that produced no build artifact.
-                    // It means it has no symbols of itself, and all references to it
-                    // are really references to this library.
-                    // Example: dependencies: addr2line, gimli, hashbrown, proc_macro
-                    // println!("{crate_name} depends on '{dep_crate_name}' which we haven't compiled");
+                    // TODO: figure out why we sometimes end up here
+                    // println!(
+                    //     "{crate_name} depends on '{dep_crate_name}' which we haven't compiled"
+                    // );
                 }
             }
         }
@@ -237,7 +248,6 @@ impl Checker {
         } else if let Some(reasons) = deduced_caps.own_caps.get(&Capability::Any) {
             // Why do we think this crate needs the `Any` capability?
             let mut info = format!("{}Any because of", Capability::Any.emoji());
-            // TODO: pick a random reasons instead of the first N
             let max_width = 60;
             for symbol in reasons.iter().reservoir_sample(5) {
                 if info.len() < max_width {

@@ -58,7 +58,7 @@ impl CheckCommand {
             println!(
                 "Expected config at {:?} - create one with 'cargo-caps init' or change the path with --config",
                 self.config
-            ); // TODO: cargo-caps init
+            );
             WorkspaceConfig::default()
         };
 
@@ -87,6 +87,11 @@ impl CheckCommand {
 
         let stdout = child.stdout.take().unwrap();
         let reader = BufReader::new(stdout);
+
+        assert!(
+            metadata.resolve.is_some(),
+            "Missing resolved dependency graph"
+        );
 
         let checker = Checker {
             rules: SymbolRules::load_default(),
