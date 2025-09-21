@@ -27,10 +27,6 @@ impl CrateName {
 
         Ok(Self(normalized))
     }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl std::fmt::Debug for CrateName {

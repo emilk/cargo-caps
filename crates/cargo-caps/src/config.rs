@@ -1,14 +1,23 @@
 use cargo_metadata::camino::Utf8Path;
 
-use crate::{CapabilitySet, CrateName};
+use crate::{Capability, CapabilitySet, CrateName};
 
 /// What crates are allowed what capabilities?
-#[derive(Default, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 pub struct WorkspaceConfig {
     pub rules: Vec<CrateRule>,
 }
 
 impl WorkspaceConfig {
+    pub fn allow_basics() -> Self {
+        Self {
+            rules: vec![CrateRule {
+                caps: [Capability::Alloc, Capability::Panic].into_iter().collect(),
+                crates: vec![CratePattern::Any],
+            }],
+        }
+    }
+
     /// What capabilities has this crate been granted?
     pub fn crate_caps(&self, crate_name: &CrateName) -> CapabilitySet {
         let mut caps = CapabilitySet::new();

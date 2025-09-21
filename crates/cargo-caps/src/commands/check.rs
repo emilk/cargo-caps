@@ -59,16 +59,16 @@ impl CheckCommand {
                 "Expected config at {:?} - create one with 'cargo-caps init' or change the path with --config",
                 self.config
             );
-            WorkspaceConfig::default()
+            println!();
+            WorkspaceConfig::allow_basics()
         };
 
         let metadata = self.gather_cargo_metadata()?;
+        let crate_infos = self.calc_crate_kinds(&metadata)?;
 
         // TODO: before starting the actual build,
         // make sure all build.rs files are allow-listed
         // or we might be in danger!
-
-        let crate_infos = self.calc_crate_kinds(&metadata)?;
 
         let mut cmd = self.make_cargo_command();
 
@@ -108,9 +108,7 @@ impl CheckCommand {
                         }
                     }
                     Message::BuildScriptExecuted(build_script) => {
-                        if true {
-                            // TODO: figure out the path of the binary so we can analyze the symbls in it
-                        } else {
+                        if false {
                             println!("BuildScriptExecuted: {build_script:?}");
                         }
                     }

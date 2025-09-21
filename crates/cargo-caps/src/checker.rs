@@ -36,6 +36,12 @@ impl Checker {
         verbose: bool,
         artifact: &cargo_metadata::Artifact,
     ) -> Result<(), anyhow::Error> {
+        if artifact.executable.is_some() {
+            // When building a workspace there is a lot of example binaries etc.
+            // They all have all the capabilities.
+            return Ok(());
+        }
+
         let package = self
             .metadata
             .packages
@@ -52,7 +58,7 @@ impl Checker {
         } else {
             // Not sure why we sometimes end up here.
             // Examples: bitflags block2 objc2 objc2_app_kit memoffset rustix
-            // println!("ERROR: unknown crate {}", artifact.target.name);
+            println!("ERROR: unknown crate {}", artifact.target.name);
             return Ok(());
             // None
         };
@@ -109,6 +115,17 @@ impl Checker {
             // build.rs files and proc-macros are binaries with a main function and everything.
             // There is very little they can't do.
             // So they will always be sus
+            let artifact_kind_name = match artifact_kind {
+                TargetKind::CustomBuild => "build.rs",
+                TargetKind::ProcMacro => "proc-macro",
+                _ => unreachable!(),
+            };
+            println!(
+                "{} executed a {} at {}",
+                package.name,
+                artifact_kind_name,
+                as_relative_path(&artifact.target.src_path)
+            );
             return Ok(false);
         }
 
