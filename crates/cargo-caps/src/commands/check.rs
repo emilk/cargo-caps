@@ -180,7 +180,7 @@ impl CheckCommand {
         anyhow::bail!("Failed to locate manifest path of package '{crate_name}'");
     }
 
-    fn gather_cargo_metadata(&self) -> Result<cargo_metadata::Metadata, anyhow::Error> {
+    fn gather_cargo_metadata(&self) -> anyhow::Result<cargo_metadata::Metadata> {
         let mut metadata_cmd = MetadataCommand::new();
         if let Some(package) = &self.package {
             metadata_cmd.manifest_path(Self::cargo_toml_path_of_package(package)?);

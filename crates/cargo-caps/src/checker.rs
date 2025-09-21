@@ -36,7 +36,7 @@ impl Checker {
         crate_infos: &HashMap<PackageId, DepKindSet>,
         verbose: bool,
         artifact: &cargo_metadata::Artifact,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         if artifact.executable.is_some() {
             // When building a workspace there is a lot of example binaries etc.
             // They all have all the capabilities.
@@ -84,22 +84,14 @@ impl Checker {
         Ok(())
     }
 
-    /// NOTE: each crate can have multiple artifacts, e.g. both a `custom-build` (build.rs)
-    /// and a library.
-    ///
-    /// Returns `true` if we printed anything
-    fn add_artifact(
+    fn deduce_caps(
         &self,
-        output: &mut CheckerOutput,
+        output: &CheckerOutput,
         package: &Package,
         artifact: &Artifact,
         bin_path: &Utf8Path,
-        dep_kinds: &DepKindSet,
-        verbose: bool,
-    ) -> anyhow::Result<bool> {
+    ) -> anyhow::Result<DeducedCaps> {
         let crate_name = CrateName::new(package.name.to_string())?;
-
-        let allowed_caps = self.config.crate_caps(&crate_name);
 
         debug_assert_eq!(
             artifact.target.kind.len(),
@@ -108,7 +100,6 @@ impl Checker {
             artifact.target.kind
         );
         let artifact_kind = &artifact.target.kind[0];
-
         let mut deduced_caps = if matches!(
             artifact_kind,
             &TargetKind::CustomBuild | &TargetKind::ProcMacro
@@ -140,16 +131,12 @@ impl Checker {
             deduce_caps_of_binary(&self.rules, bin_path)?
         };
         deduced_caps.unknown_crates.clear();
-
         let resolve = self.metadata.resolve.as_ref().unwrap();
         let node = resolve
             .nodes
             .iter()
             .find(|node| node.id == package.id)
             .unwrap();
-        // for
-
-        // for dependency in &package.dependencies
         for dependency in &node.deps {
             if !dependency
                 .dep_kinds
@@ -180,6 +167,25 @@ impl Checker {
                 }
             }
         }
+        Ok(deduced_caps)
+    }
+
+    /// NOTE: each crate can have multiple artifacts, e.g. both a `custom-build` (build.rs)
+    /// and a library.
+    ///
+    /// Returns `true` if we printed anything
+    fn add_artifact(
+        &self,
+        output: &mut CheckerOutput,
+        package: &Package,
+        artifact: &Artifact,
+        bin_path: &Utf8Path,
+        dep_kinds: &DepKindSet,
+        verbose: bool,
+    ) -> anyhow::Result<bool> {
+        let crate_name = CrateName::new(package.name.to_string())?;
+
+        let mut deduced_caps = self.deduce_caps(output, package, artifact, bin_path)?;
 
         {
             let crate_caps = output.crate_caps.entry(crate_name.clone()).or_default();
@@ -206,6 +212,8 @@ impl Checker {
                 .entry(Capability::BuildRs)
                 .or_default();
         }
+
+        let allowed_caps = self.config.crate_caps(&crate_name);
 
         let crate_kind_suffix = {
             if artifact.target.kind.contains(&TargetKind::CustomBuild) {
@@ -328,10 +336,13 @@ impl Checker {
                 println!("  features: {}", features.join(", "));
             }
 
-            println!("  Artifact kind: {artifact_kind}");
+            println!(
+                "  Artifact kind: {}",
+                artifact.target.kind.iter().join(", ")
+            );
             println!("  Crate kind: {}", dep_kinds.kind.iter().join(", "));
 
-            if artifact_kind != &TargetKind::CustomBuild && has_build_rs(package) {
+            if !artifact.target.kind.contains(&TargetKind::CustomBuild) && has_build_rs(package) {
                 let build_rs_caps = output
                     .crate_caps
                     .get(&crate_name)
