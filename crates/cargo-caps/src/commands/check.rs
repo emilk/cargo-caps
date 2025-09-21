@@ -164,15 +164,7 @@ impl CheckCommand {
         };
 
         let sources = target_packages.iter().map(|p| p.id.clone()).collect_vec();
-        let resolve = match &metadata.resolve {
-            Some(resolve) => resolve,
-            None => {
-                anyhow::bail!("Missing resolved crate graph");
-            }
-        };
-        Ok(crate::build_graph_analysis::analyze_dependency_graph(
-            resolve, &sources,
-        ))
+        crate::build_graph_analysis::analyze_dependency_graph(metadata, &sources)
     }
 
     fn cargo_toml_path_of_package(crate_name: &str) -> anyhow::Result<Utf8PathBuf> {

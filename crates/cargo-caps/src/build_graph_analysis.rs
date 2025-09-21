@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
-use cargo_metadata::{DependencyKind, Package, PackageId};
+use cargo_metadata::{DependencyKind, Package, PackageId, TargetKind};
 use petgraph::{Directed, graph::NodeIndex, visit::EdgeRef as _};
 
 /// How is the main target depending on a crate?
@@ -104,9 +104,14 @@ impl DepGraph {
     }
 
     pub fn from_cargo_metadata(
-        resolve: &cargo_metadata::Resolve,
+        metadata: &cargo_metadata::Metadata,
         starting_packages: &[PackageId],
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
+        let resolve = metadata
+            .resolve
+            .as_ref()
+            .ok_or_else(|| anyhow::format_err!("Missing resolved crate graph in cargo_metadata"))?;
+
         let mut graph = Self::default();
 
         // Add all starting packages to the queue
@@ -116,14 +121,23 @@ impl DepGraph {
 
         for node in &resolve.nodes {
             for dep in &node.deps {
+                let is_proc_macro = metadata[&dep.pkg]
+                    .targets
+                    .iter()
+                    .any(|t| t.kind.contains(&TargetKind::ProcMacro));
+
                 let mut edge_kind = BTreeSet::new();
-                for kind in &dep.dep_kinds {
-                    edge_kind.insert(match kind.kind {
-                        DependencyKind::Normal => DepKind::Normal,
-                        DependencyKind::Build => DepKind::Build,
-                        DependencyKind::Development => DepKind::Dev,
-                        DependencyKind::Unknown => DepKind::Unknown,
-                    });
+                if is_proc_macro {
+                    edge_kind.insert(DepKind::ProcMacro);
+                } else {
+                    for kind in &dep.dep_kinds {
+                        edge_kind.insert(match kind.kind {
+                            DependencyKind::Normal => DepKind::Normal,
+                            DependencyKind::Build => DepKind::Build,
+                            DependencyKind::Development => DepKind::Dev,
+                            DependencyKind::Unknown => DepKind::Unknown,
+                        });
+                    }
                 }
                 let edge = Edge { kind: edge_kind };
 
@@ -131,7 +145,7 @@ impl DepGraph {
             }
         }
 
-        graph
+        Ok(graph)
     }
 
     fn analyze(mut self) -> HashMap<PackageId, DepKindSet> {
@@ -197,10 +211,10 @@ impl DepGraph {
 }
 
 pub fn analyze_dependency_graph(
-    resolve: &cargo_metadata::Resolve,
+    metadata: &cargo_metadata::Metadata,
     sinks: &[PackageId],
-) -> HashMap<PackageId, DepKindSet> {
-    DepGraph::from_cargo_metadata(resolve, sinks).analyze()
+) -> anyhow::Result<HashMap<PackageId, DepKindSet>> {
+    Ok(DepGraph::from_cargo_metadata(metadata, sinks)?.analyze())
 }
 
 /// We are looking at a dependency.
@@ -210,25 +224,22 @@ fn dependency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTr
 
     for &dep_kind in &edge.kind {
         for &crate_kind in &dependent.kind {
-            #[expect(clippy::match_same_arms)]
             let new_kind = match (dep_kind, crate_kind) {
+                // Unknown is the most viral:
+                (_, DepKind::Unknown) | (DepKind::Unknown, _) => DepKind::Unknown,
+
+                // All dependencies of a build-dependency are marked build-dependencies:
+                (_, DepKind::Build) | (DepKind::Build, _) => DepKind::Build,
+
                 // All dependencies ON proc-macros are marked proc-macros:
-                (_, DepKind::ProcMacro) => DepKind::ProcMacro,
+                // All dependencies of a proc-macros are marked proc-macros:
+                (_, DepKind::ProcMacro) | (DepKind::ProcMacro, _) => DepKind::ProcMacro,
 
                 // A normal dependency inherits dependent's kind:
                 (DepKind::Normal, crate_kind) => crate_kind,
 
-                // All dependencies of a build-dependency are marked build-dependencies:
-                (DepKind::Build, _) => DepKind::Build,
-
                 // All dependencies of a dev-dependency are marked dev-dependencies:
                 (DepKind::Dev, _) => DepKind::Dev,
-
-                // All dependencies of a proc-macros are marked proc-macros:
-                (DepKind::ProcMacro, _) => DepKind::ProcMacro,
-
-                // Unknown is viral:
-                (_, DepKind::Unknown) | (DepKind::Unknown, _) => DepKind::Unknown,
             };
             final_set.insert(new_kind);
         }
@@ -269,35 +280,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "TODO: fix graph analysis"]
     fn test_proc_macro() {
         let mut graph = DepGraph::default();
         graph.insert_node(&pid("binary"), DepKind::Normal);
-        graph.insert_node(&pid("clap_derive"), DepKind::ProcMacro);
-        // graph.insert_node(&pid("proc-macro2"), CrateKind::Normal);
-        graph.add_edge(
-            pid("binary"),
-            pid("clap_derive"),
-            Edge::from(DepKind::Normal),
-        );
-        graph.add_edge(
-            pid("clap_derive"),
-            pid("proc-macro2"),
-            Edge::from(DepKind::Normal),
-        );
-
-        let result = graph.analyze();
-        assert_eq!(&result[&pid("binary")], &set(DepKind::Normal));
-        assert_eq!(&result[&pid("clap_derive")], &set(DepKind::ProcMacro));
-        assert_eq!(&result[&pid("proc-macro2")], &set(DepKind::ProcMacro));
-    }
-
-    #[test]
-    fn test_proc_macro2() {
-        let mut graph = DepGraph::default();
-        graph.insert_node(&pid("binary"), DepKind::Normal);
-        // graph.insert_node(&pid("clap_derive"), DepKind::Normal);
-        // graph.insert_node(&pid("proc-macro2"), DepKind::Normal);
         graph.add_edge(
             pid("binary"),
             pid("clap_derive"),
@@ -310,7 +295,6 @@ mod tests {
         );
 
         let result = graph.analyze();
-
         assert_eq!(&result[&pid("binary")], &set(DepKind::Normal));
         assert_eq!(&result[&pid("clap_derive")], &set(DepKind::ProcMacro));
         assert_eq!(&result[&pid("proc-macro2")], &set(DepKind::ProcMacro));

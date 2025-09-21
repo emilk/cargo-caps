@@ -326,6 +326,8 @@ rules: [
 			"std::sys::thread_local::*"
 			"std::sys::unix::abort_internal" // TODO: consider adding special capability for abort/exit
 			"std::sys::unix::decode_error_kind"
+			"std::sys::unix::rand::*"
+			"std::sys::unix::thread_local_dtor::*"
 			"std::thread::current::current"
 			"std::thread::local::*"
 			"std::thread::park"
@@ -372,9 +374,10 @@ rules: [
 			"std::os::fd::owned::AsFd"
 			"std::os::fd::owned::BorrowedFd::borrow_raw"
 			"std::sys::io::io_slice::*"
+			"std::sys::pal::unix::io::*"
 			"std::sys::pal::unix::stdio::*"
 			"std::sys::stdio::*"
-			"std::sys::pal::unix::io::*"
+			"std::sys::unix::stdio::*"
 		]
 	}
 	{
