@@ -18,17 +18,73 @@ use syn::{Type, UseTree, punctuated::Punctuated, spanned::Spanned as _, visit::V
 
 use crate::rust_path::RustPath;
 
+pub struct ParsedRust {
+    /// All full (absolute) paths we detected.
+    pub all_paths: BTreeSet<RustPath>,
+}
+
+impl ParsedRust {
+    /// Parse a Rust source file and return external usage information
+    pub fn parse_file<P: AsRef<Utf8Path>>(path: P) -> anyhow::Result<Self> {
+        let path = path.as_ref();
+        log::debug!("Parsing {path}");
+        let content = fs::read_to_string(path).with_context(|| path.to_string())?;
+        Self::parse_content(&content).with_context(|| path.to_string())
+    }
+
+    /// Parse Rust source code content and return external usage information
+    fn parse_content(rust_source: &str) -> anyhow::Result<Self> {
+        let ParserState {
+            all_paths,
+            unsupported,
+            has_external_mods,
+            imports: _, // Used up
+        } = ParserState::parse_content(rust_source)?;
+
+        if has_external_mods {
+            anyhow::bail!("cargo-caps doesn't support loading other module files");
+        }
+
+        if !unsupported.is_empty() {
+            anyhow::bail!(
+                "Source code contained syntax that cargo-caps is too dumb to understand: {}",
+                format_unsupported(&unsupported)
+            )
+        }
+
+        Ok(Self { all_paths })
+    }
+}
+
+fn format_unsupported(unsupported: &[Span]) -> String {
+    unsupported
+        .iter()
+        .map(|span| {
+            let start = span.start();
+            if let Some(src) = span.source_text() {
+                format!("{}:{}: {src}", start.line, start.column)
+            } else {
+                format!("{}:{}", start.line, start.column)
+            }
+        })
+        .join(", ")
+}
+
 #[derive(Debug)]
-pub struct Import {
+struct Import {
     /// This is short for…
-    pub ident: String,
+    ident: String,
 
     /// …all of this.
-    pub path: RustPath,
+    path: RustPath,
 }
+
 /// Represents all external dependencies found in code
 #[derive(Debug, Default)]
-pub struct RustParser {
+struct ParserState {
+    /// All full (absolute) paths we detected.
+    all_paths: BTreeSet<RustPath>,
+
     /// Was there anything unrecognized/usupported in the code?
     ///
     /// This parser is not complete, and when we encounter something we don't support,
@@ -37,52 +93,20 @@ pub struct RustParser {
     /// we can't trust the source code.
     unsupported: Vec<Span>,
 
-    /// All full (absolute) paths we detected.
-    all_paths: BTreeSet<RustPath>,
+    has_external_mods: bool,
 
     /// Imports. Used during parsing.
     imports: Vec<Import>,
 }
 
-impl RustParser {
-    /// Parse a Rust source file and return external usage information
-    pub fn parse_file<P: AsRef<Utf8Path>>(path: P) -> anyhow::Result<Self> {
-        let path = path.as_ref();
-        let content = fs::read_to_string(path).with_context(|| path.to_string())?;
-        Self::parse_content(&content)
-    }
-
+impl ParserState {
     /// Parse Rust source code content and return external usage information
-    pub fn parse_content(rust_source: &str) -> anyhow::Result<Self> {
+    fn parse_content(rust_source: &str) -> anyhow::Result<Self> {
         let syntax_tree = syn::parse_file(rust_source)?;
         let mut usage = Self::default();
         usage.visit_file(&syntax_tree);
+
         Ok(usage)
-    }
-
-    pub fn all_paths(self) -> anyhow::Result<BTreeSet<RustPath>> {
-        if self.unsupported.is_empty() {
-            Ok(self.all_paths)
-        } else {
-            anyhow::bail!(
-                "Source code contained syntax that cargo-caps is too dumb to understand: {}",
-                self.format_unsupported()
-            )
-        }
-    }
-
-    fn format_unsupported(&self) -> String {
-        self.unsupported
-            .iter()
-            .map(|span| {
-                let start = span.start();
-                if let Some(src) = span.source_text() {
-                    format!("{}:{}: {src}", start.line, start.column)
-                } else {
-                    format!("{}:{}", start.line, start.column)
-                }
-            })
-            .join(", ")
     }
 
     /// Visit use statements and extract external uses
@@ -168,7 +192,15 @@ fn as_rust_path(syn_path: &syn::Path) -> RustPath {
     RustPath::from_segments(syn_path.segments.iter().map(|seg| seg.ident.to_string()))
 }
 
-impl<'ast> Visit<'ast> for RustParser {
+impl<'ast> Visit<'ast> for ParserState {
+    fn visit_item_mod(&mut self, item_mod: &'ast syn::ItemMod) {
+        if item_mod.content.is_none() {
+            self.has_external_mods = true;
+        }
+        // Continue visiting nested items
+        syn::visit::visit_item_mod(self, item_mod);
+    }
+
     /// Visit use items (use statements)
     fn visit_item_use(&mut self, item_use: &'ast syn::ItemUse) {
         self.visit_use_tree(RustPath::new(""), &item_use.tree);
@@ -287,10 +319,7 @@ mod tests {
             struct Foo {}
         "#;
 
-        let all_paths = RustParser::parse_content(content)
-            .unwrap()
-            .all_paths()
-            .unwrap();
+        let all_paths = ParsedRust::parse_content(content).unwrap().all_paths;
 
         assert_eq!(
             as_vec(&all_paths),

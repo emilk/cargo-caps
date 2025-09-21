@@ -92,7 +92,7 @@ impl Capability {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct DeducedCapabilities {
+pub struct DeducedCaps {
     /// The known capabilities of this crate
     pub own_caps: BTreeMap<Capability, Reasons>,
 
@@ -112,7 +112,11 @@ pub type Reasons = BTreeSet<Reason>;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reason {
     Path(RustPath),
+
     Symbol(Symbol),
+
+    /// The reason we have this high capability is because we didn't succeed in understanding the source code.
+    SourceParseError(String),
 }
 
 impl std::fmt::Display for Reason {
@@ -120,6 +124,7 @@ impl std::fmt::Display for Reason {
         match self {
             Self::Path(path) => path.fmt(f),
             Self::Symbol(symbol) => write!(f, "{}", symbol.format(false)),
+            Self::SourceParseError(err) => write!(f, "{err:#?}"),
         }
     }
 }
@@ -136,7 +141,7 @@ impl From<Symbol> for Reason {
     }
 }
 
-impl DeducedCapabilities {
+impl DeducedCaps {
     pub fn from_symbols(
         rules: &SymbolRules,
         symbols: impl IntoIterator<Item = Symbol>,

@@ -2,7 +2,7 @@ use cargo_metadata::camino::Utf8PathBuf;
 
 use crate::{
     cap_rule::SymbolRules,
-    capability::{Capability, DeducedCapabilities},
+    capability::{Capability, DeducedCaps},
     reservoir_sample::ReservoirSampleExt as _,
 };
 
@@ -38,7 +38,7 @@ impl CapsCommand {
             crate::filter_symbols(symbols, self.include_local, self.include_all_kinds);
 
         // Analyze capabilities
-        let capabilities = DeducedCapabilities::from_symbols(&rules, filtered_symbols)?;
+        let capabilities = DeducedCaps::from_symbols(&rules, filtered_symbols)?;
 
         // Print results
         self.print_capabilities(&capabilities);
@@ -46,7 +46,7 @@ impl CapsCommand {
         Ok(())
     }
 
-    fn print_capabilities(&self, capabilities: &DeducedCapabilities) {
+    fn print_capabilities(&self, capabilities: &DeducedCaps) {
         println!("Capability Analysis for: {}", self.binary_path);
         println!("═══════════════════════════════════════");
 

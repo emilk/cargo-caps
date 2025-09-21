@@ -29,8 +29,10 @@ rules: [
 			"acosf"
 			"asin"
 			"asinf"
+			"atan"
 			"atan2"
 			"atan2f"
+			"atanf"
 			"cbrt"
 			"cbrtf"
 			"cos"
@@ -50,6 +52,7 @@ rules: [
 			"log"
 			"log10"
 			"log10f"
+			"log1p"
 			"log2"
 			"log2f"
 			"logf"
@@ -65,6 +68,10 @@ rules: [
 			"sinhf"
 			"tan"
 			"tanf"
+			"tanh"
+			"tanhf"
+
+			// Non-math:
 			"pthread_cond_*"
 			"pthread_mutex_*"
 			"close" // Closing a FILE is fine
@@ -293,7 +300,6 @@ rules: [
 			"CFStringGetBytes"
 			"CFStringGetCStringPtr"
 			"CFStringGetLength"
-
 			"std::backtrace::*"
 			"std::collections::*"
 			"std::ffi::os_str::*"
@@ -316,7 +322,7 @@ rules: [
 			"std::sys_common::backtrace::*"
 			"std::sys_common::once::*"
 			"std::sys_common::once"
-			"std::sys::common::thread_local::*",
+			"std::sys::common::thread_local::*"
 			"std::sys::os_str::*"
 			"std::sys::pal::unix::abort_internal*"
 			"std::sys::pal::unix::decode_error_kind"
@@ -336,7 +342,6 @@ rules: [
 			"std::thread::park"
 			"std::thread::Thread::id"
 			"std::thread::ThreadId*"
-
 			"std::sys::log2f32" // math
 			"std::sys::log2f64" // math
 			"std::sys::log_wrapper" // math: https://stdrs.dev/nightly/x86_64-unknown-linux-gnu/std/sys/fn.log_wrapper.html
@@ -407,10 +412,15 @@ rules: [
 	{
 		caps: ["alloc", "panic", "time"]
 		patterns: [
-			"CFTimeZone*",
+			"CFTimeZone*"
 			"std::sys::pal::unix::time::*"
 			"std::time::*"
 		]
+	}
+	{
+		// Things we know allow the user to do _anything_
+		caps: ["*"]
+		patterns: ["std::process::*", "std::sys::process"]
 	}
 	{
 		// TODO: categorize the rest of std:: :)

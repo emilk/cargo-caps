@@ -4,10 +4,10 @@ use crate::{
     CrateName,
     build_graph_analysis::{DepKind, DepKindSet, has_build_rs},
     cap_rule::SymbolRules,
-    capability::{Capability, CapabilitySet, DeducedCapabilities},
+    capability::{Capability, CapabilitySet, DeducedCaps, Reason},
     config::WorkspaceConfig,
     reservoir_sample::ReservoirSampleExt as _,
-    src_analysis::RustParser,
+    src_analysis::ParsedRust,
 };
 use cargo_metadata::{
     Artifact, DependencyKind, Metadata, Package, PackageId, TargetKind, camino::Utf8Path,
@@ -17,7 +17,7 @@ use itertools::Itertools as _;
 /// What [`Checker`] computers
 #[derive(Default)]
 pub struct CheckerOutput {
-    pub crate_caps: HashMap<CrateName, BTreeMap<TargetKind, DeducedCapabilities>>,
+    pub crate_caps: HashMap<CrateName, BTreeMap<TargetKind, DeducedCaps>>,
     pub num_artifacts_passed: usize,
 }
 
@@ -37,12 +37,12 @@ impl Checker {
         verbose: bool,
         artifact: &cargo_metadata::Artifact,
     ) -> Result<(), anyhow::Error> {
-        // TODO
-        // if artifact.executable.is_some() {
-        //     // When building a workspace there is a lot of example binaries etc.
-        //     // They all have all the capabilities.
-        //     return Ok(());
-        // }
+        if artifact.executable.is_some() {
+            // When building a workspace there is a lot of example binaries etc.
+            // They all have all the capabilities.
+            // NOTE: this does NOT skip build.rs files.
+            return Ok(());
+        }
 
         let package = self
             .metadata
@@ -122,13 +122,23 @@ impl Checker {
                 _ => unreachable!(),
             };
 
-            let paths = RustParser::parse_file(&artifact.target.src_path)?.all_paths()?;
-
-            DeducedCapabilities::from_paths(&self.rules, paths.into_iter())?
+            match ParsedRust::parse_file(&artifact.target.src_path) {
+                Ok(parsed) => {
+                    let ParsedRust { all_paths } = parsed;
+                    DeducedCaps::from_paths(&self.rules, all_paths.into_iter())?
+                }
+                Err(err) => {
+                    let mut deduced_caps = DeducedCaps::default();
+                    deduced_caps.own_caps.insert(
+                        Capability::Any,
+                        std::iter::once(Reason::SourceParseError(format!("{err:#}"))).collect(),
+                    );
+                    deduced_caps
+                }
+            }
         } else {
             deduce_caps_of_binary(&self.rules, bin_path)?
         };
-
         deduced_caps.unknown_crates.clear();
 
         let resolve = self.metadata.resolve.as_ref().unwrap();
@@ -370,11 +380,8 @@ fn filter_capabilities(actual_caps: &CapabilitySet, allowed_caps: &CapabilitySet
     }
 }
 
-fn deduce_caps_of_binary(
-    rules: &SymbolRules,
-    path: &Utf8Path,
-) -> anyhow::Result<DeducedCapabilities> {
+fn deduce_caps_of_binary(rules: &SymbolRules, path: &Utf8Path) -> anyhow::Result<DeducedCaps> {
     let symbols = crate::extract_symbols(path)?;
     let filtered_symbols = crate::filter_symbols(symbols, false, false);
-    DeducedCapabilities::from_symbols(rules, filtered_symbols)
+    DeducedCaps::from_symbols(rules, filtered_symbols)
 }
