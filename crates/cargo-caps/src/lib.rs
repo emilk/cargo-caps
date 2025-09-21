@@ -25,7 +25,7 @@ mod demangle;
 mod print;
 mod reservoir_sample;
 mod rust_path;
-pub mod src_analysis; // TODO: not pub
+mod src_analysis;
 mod symbol;
 mod tree;
 
@@ -87,8 +87,8 @@ fn extract_symbols(binary_path: &Utf8Path) -> Result<Vec<Symbol>> {
 /// Filter symbols based on scope and kind preferences
 pub fn filter_symbols(
     symbols: Vec<Symbol>,
-    include_local: bool,
-    include_all_kinds: bool,
+    include_local: bool,     // TODO: remove bool args
+    include_all_kinds: bool, // TODO: remove bool args
 ) -> Vec<Symbol> {
     symbols
         .into_iter()

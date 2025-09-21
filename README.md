@@ -13,6 +13,10 @@ Some of the code was AI generated and has not yet been vetted by human eyes.
 Half-finished.
 Not ready for production.
 
+## Design goals
+* Fail safe: if `cargo-caps` can't understand it then assume the worst
+* Minimize noise: if we bother the user too much, they'll get desensitized
+
 ## Installation
 `cargo install cargo-caps --locked`
 

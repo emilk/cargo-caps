@@ -61,9 +61,9 @@ impl CapsCommand {
                 println!("  {icon} {capability:?}");
 
                 if (self.verbose || *capability == Capability::Any) && !reasons.is_empty() {
-                    println!("    Reasons ({} symbols):", reasons.len());
-                    for symbol in reasons.iter().reservoir_sample(5) {
-                        println!("      • {}", symbol.format(false));
+                    println!("    Reasons ({}):", reasons.len());
+                    for reason in reasons.iter().reservoir_sample(5) {
+                        println!("      • {reason}");
                     }
                     if reasons.len() > 5 {
                         println!("      ... and {} more", reasons.len() - 5);
@@ -76,14 +76,14 @@ impl CapsCommand {
         // Show unknown crates
         if !capabilities.unknown_crates.is_empty() {
             println!("❓ Unknown External Crates:");
-            for (crate_name, symbols) in &capabilities.unknown_crates {
-                println!("  📦 {} ({} symbols)", crate_name, symbols.len());
+            for (crate_name, reasons) in &capabilities.unknown_crates {
+                println!("  📦 {} ({} symbols)", crate_name, reasons.len());
                 if self.verbose {
-                    for symbol in symbols.iter().take(3) {
-                        println!("      • {}", symbol.format(false));
+                    for reason in reasons.iter().take(3) {
+                        println!("      • {reason}");
                     }
-                    if symbols.len() > 3 {
-                        println!("      ... and {} more", symbols.len() - 3);
+                    if reasons.len() > 3 {
+                        println!("      ... and {} more", reasons.len() - 3);
                     }
                 }
             }

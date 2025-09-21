@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
-use crate::{CrateName, Symbol, cap_rule::SymbolRules, symbol::FunctionOrPath};
+use crate::{
+    CrateName, Symbol, cap_rule::SymbolRules, rust_path::RustPath, symbol::FunctionOrPath,
+};
 
 pub type CapabilitySet = BTreeSet<Capability>;
 
@@ -101,13 +103,38 @@ pub struct DeducedCapabilities {
     pub unknown_symbols: BTreeSet<Symbol>,
 
     /// We need to resolve these crates to see what their capabilities are
-    pub unknown_crates: BTreeMap<CrateName, BTreeSet<Symbol>>,
+    pub unknown_crates: BTreeMap<CrateName, Reasons>,
 }
 
 /// Why do we have this capability?
 pub type Reasons = BTreeSet<Reason>;
 
-pub type Reason = Symbol;
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Reason {
+    Path(RustPath),
+    Symbol(Symbol),
+}
+
+impl std::fmt::Display for Reason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Path(path) => path.fmt(f),
+            Self::Symbol(symbol) => write!(f, "{}", symbol.format(false)),
+        }
+    }
+}
+
+impl From<RustPath> for Reason {
+    fn from(path: RustPath) -> Self {
+        Self::Path(path)
+    }
+}
+
+impl From<Symbol> for Reason {
+    fn from(symbol: Symbol) -> Self {
+        Self::Symbol(symbol)
+    }
+}
 
 impl DeducedCapabilities {
     pub fn from_symbols(
@@ -116,7 +143,18 @@ impl DeducedCapabilities {
     ) -> anyhow::Result<Self> {
         let mut slf = Self::default();
         for symbol in symbols {
-            slf.add(rules, &symbol)?;
+            slf.add_symbol(rules, &symbol)?;
+        }
+        Ok(slf)
+    }
+
+    pub fn from_paths(
+        rules: &SymbolRules,
+        paths: impl IntoIterator<Item = RustPath>,
+    ) -> anyhow::Result<Self> {
+        let mut slf = Self::default();
+        for path in paths {
+            slf.add_path(rules, path)?;
         }
         Ok(slf)
     }
@@ -151,7 +189,7 @@ impl DeducedCapabilities {
     }
 
     /// Capability from symbol
-    fn add(&mut self, rules: &SymbolRules, symbol: &Symbol) -> anyhow::Result<()> {
+    fn add_symbol(&mut self, rules: &SymbolRules, symbol: &Symbol) -> anyhow::Result<()> {
         for path in symbol.paths() {
             match path {
                 FunctionOrPath::Function(fun_name) => {
@@ -163,7 +201,7 @@ impl DeducedCapabilities {
                             self.own_caps
                                 .entry(capability)
                                 .or_default()
-                                .insert(symbol.clone());
+                                .insert(Reason::from(symbol.clone()));
                         }
                     } else {
                         self.unknown_symbols.insert(symbol.clone());
@@ -178,7 +216,7 @@ impl DeducedCapabilities {
                             self.own_caps
                                 .entry(capability)
                                 .or_default()
-                                .insert(symbol.clone());
+                                .insert(Reason::from(symbol.clone()));
                         }
                     } else {
                         // No rule matched - assume an external crate:
@@ -191,10 +229,36 @@ impl DeducedCapabilities {
                         self.unknown_crates
                             .entry(crate_name)
                             .or_default()
-                            .insert(symbol.clone());
+                            .insert(Reason::from(symbol.clone()));
                     }
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    fn add_path(&mut self, rules: &SymbolRules, rust_path: RustPath) -> anyhow::Result<()> {
+        let path_str = rust_path.to_string();
+        // Check rules for the path
+        if let Some(capabilities) = rules.match_symbol(&path_str) {
+            for &capability in capabilities {
+                self.own_caps
+                    .entry(capability)
+                    .or_default()
+                    .insert(Reason::from(rust_path.clone()));
+            }
+        } else {
+            // No rule matched - assume an external crate:
+            let segments = rust_path.segments();
+
+            let crate_name = segments[0];
+            let crate_name =
+                CrateName::new(crate_name).with_context(|| format!("path: {rust_path}"))?;
+            self.unknown_crates
+                .entry(crate_name)
+                .or_default()
+                .insert(Reason::from(rust_path));
         }
 
         Ok(())

@@ -1,5 +1,18 @@
+//! The point of this crate is to parse _simple_ `build.rs` files
+//! and extract all [`RustPath`]s used in them.
+//!
+//! This is because the normal symbol-extration we use for libraries
+//! does not (yet) work for executables, because they tend to pull in
+//! _a lot_ of unrelated symbols (TODO: consider calling strip on them???)
+//!
+//! TODO: make sure this things fails _safe_, i.e. that unreqcognized syntax
+//! leads to an error rather than to assumling the build.rs is safe.
+
 use std::{collections::BTreeSet, fs};
 
+use anyhow::Context as _;
+use cargo_metadata::camino::Utf8Path;
+use itertools::Itertools as _;
 use proc_macro2::Span;
 use syn::{Type, UseTree, punctuated::Punctuated, spanned::Spanned as _, visit::Visit};
 
@@ -13,28 +26,68 @@ pub struct Import {
     /// …all of this.
     pub path: RustPath,
 }
-
 /// Represents all external dependencies found in code
 #[derive(Debug, Default)]
-pub struct ExternalUsage {
+pub struct RustParser {
     /// Was there anything unrecognized/usupported in the code?
     ///
     /// This parser is not complete, and when we encounter something we don't support,
     /// we put it in this bucket.
     /// Anything in here is suspicious, and so if this is non-empty, then
     /// we can't trust the source code.
-    pub unsupported: Vec<Span>,
+    unsupported: Vec<Span>,
 
-    /// All
-    pub all_paths: BTreeSet<RustPath>,
+    /// All full (absolute) paths we detected.
+    all_paths: BTreeSet<RustPath>,
 
-    /// e.g. `use std::fs;`
-    pub imports: Vec<Import>,
+    /// Imports. Used during parsing.
+    imports: Vec<Import>,
 }
 
-impl ExternalUsage {
+impl RustParser {
+    /// Parse a Rust source file and return external usage information
+    pub fn parse_file<P: AsRef<Utf8Path>>(path: P) -> anyhow::Result<Self> {
+        let path = path.as_ref();
+        let content = fs::read_to_string(path).with_context(|| path.to_string())?;
+        Self::parse_content(&content)
+    }
+
+    /// Parse Rust source code content and return external usage information
+    pub fn parse_content(rust_source: &str) -> anyhow::Result<Self> {
+        let syntax_tree = syn::parse_file(rust_source)?;
+        let mut usage = Self::default();
+        usage.visit_file(&syntax_tree);
+        Ok(usage)
+    }
+
+    pub fn all_paths(self) -> anyhow::Result<BTreeSet<RustPath>> {
+        if self.unsupported.is_empty() {
+            Ok(self.all_paths)
+        } else {
+            anyhow::bail!(
+                "Source code contained syntax that cargo-caps is too dumb to understand: {}",
+                self.format_unsupported()
+            )
+        }
+    }
+
+    fn format_unsupported(&self) -> String {
+        self.unsupported
+            .iter()
+            .map(|span| {
+                let start = span.start();
+                if let Some(src) = span.source_text() {
+                    format!("{}:{}: {src}", start.line, start.column)
+                } else {
+                    format!("{}:{}", start.line, start.column)
+                }
+            })
+            .join(", ")
+    }
+
     /// Visit use statements and extract external uses
     fn visit_use_tree(&mut self, prefix: RustPath, use_tree: &UseTree) {
+        // TODO: push/pop scopes - do not assume all `use`s are at the top of the file.
         match use_tree {
             UseTree::Path(use_path) => {
                 self.visit_use_tree(
@@ -82,6 +135,10 @@ impl ExternalUsage {
         let rust_path = as_rust_path(syn_path);
         let segments = rust_path.segments();
 
+        // TODO: resolve all paths _last_ because use statements can come _after_ usages:
+        //
+        //    fs::read(…);
+        //    use std::fs;
         if let Some(import) = self
             .imports
             .iter()
@@ -111,7 +168,7 @@ fn as_rust_path(syn_path: &syn::Path) -> RustPath {
     RustPath::from_segments(syn_path.segments.iter().map(|seg| seg.ident.to_string()))
 }
 
-impl<'ast> Visit<'ast> for ExternalUsage {
+impl<'ast> Visit<'ast> for RustParser {
     /// Visit use items (use statements)
     fn visit_item_use(&mut self, item_use: &'ast syn::ItemUse) {
         self.visit_use_tree(RustPath::new(""), &item_use.tree);
@@ -198,45 +255,8 @@ impl syn::parse::Parse for DeriveList {
     }
 }
 
-/// Main parser for analyzing Rust external dependencies
-pub struct RustExternalParser;
-
-impl RustExternalParser {
-    pub fn new() -> Self {
-        Self
-    }
-
-    /// Parse a Rust source file and return external usage information
-    pub fn parse_file<P: AsRef<std::path::Path>>(
-        &self,
-        rs_file_path: P,
-    ) -> Result<ExternalUsage, Box<dyn std::error::Error>> {
-        let content = fs::read_to_string(rs_file_path)?;
-        self.parse_content(&content)
-    }
-
-    /// Parse Rust source code content and return external usage information
-    pub fn parse_content(
-        &self,
-        rust_source: &str,
-    ) -> Result<ExternalUsage, Box<dyn std::error::Error>> {
-        let syntax_tree = syn::parse_file(rust_source)?;
-        let mut usage = ExternalUsage::default();
-        usage.visit_file(&syntax_tree);
-        Ok(usage)
-    }
-}
-
-impl Default for RustExternalParser {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
-
-    use itertools::Itertools as _;
 
     use super::*;
 
@@ -244,24 +264,8 @@ mod tests {
         all_paths.iter().map(|p| p.to_string()).collect()
     }
 
-    fn format_unsupported(usage: &ExternalUsage) -> String {
-        usage
-            .unsupported
-            .iter()
-            .map(|span| {
-                let start = span.start();
-                if let Some(src) = span.source_text() {
-                    format!("{}:{}: {src}", start.line, start.column)
-                } else {
-                    format!("{}:{}", start.line, start.column)
-                }
-            })
-            .join(", ")
-    }
-
     #[test]
     fn test_external_crates() {
-        let parser = RustExternalParser::new();
         let content = r#"
             use serde::{self, Deserialize};
             use tokio::runtime::Runtime;
@@ -283,16 +287,13 @@ mod tests {
             struct Foo {}
         "#;
 
-        let usage = parser.parse_content(content).unwrap();
-
-        assert!(
-            usage.unsupported.is_empty(),
-            "Source code contained unsupported syntax at {}",
-            format_unsupported(&usage)
-        );
+        let all_paths = RustParser::parse_content(content)
+            .unwrap()
+            .all_paths()
+            .unwrap();
 
         assert_eq!(
-            as_vec(&usage.all_paths),
+            as_vec(&all_paths),
             [
                 "log::info",
                 "serde::Deserialize",

@@ -297,7 +297,9 @@ rules: [
 			"std::backtrace::*"
 			"std::collections::*"
 			"std::ffi::os_str::*"
+			"std::ffi::OsString"
 			"std::hash::*"
+			"std::iter::*"
 			"std::os::fd::owned::OwnedFd"
 			"std::os::unix::ffi::os_str::*"
 			"std::panic::*"
@@ -309,6 +311,7 @@ rules: [
 			"std::path::PathBuf" // NOT ::*, but just `<std::path::PathBuf as core::clone::Clone>::clone` is OK
 			"std::process::abort*" // TODO: consider adding special capability for abort/exit
 			"std::process::exit*" // TODO: consider adding special capability for abort/exit
+			"std::str::*"
 			"std::sync::*"
 			"std::sys_common::backtrace::*"
 			"std::sys_common::once::*"

@@ -7,6 +7,7 @@ use crate::{
     capability::{Capability, CapabilitySet, DeducedCapabilities},
     config::WorkspaceConfig,
     reservoir_sample::ReservoirSampleExt as _,
+    src_analysis::RustParser,
 };
 use cargo_metadata::{
     Artifact, DependencyKind, Metadata, Package, PackageId, TargetKind, camino::Utf8Path,
@@ -36,11 +37,12 @@ impl Checker {
         verbose: bool,
         artifact: &cargo_metadata::Artifact,
     ) -> Result<(), anyhow::Error> {
-        if artifact.executable.is_some() {
-            // When building a workspace there is a lot of example binaries etc.
-            // They all have all the capabilities.
-            return Ok(());
-        }
+        // TODO
+        // if artifact.executable.is_some() {
+        //     // When building a workspace there is a lot of example binaries etc.
+        //     // They all have all the capabilities.
+        //     return Ok(());
+        // }
 
         let package = self
             .metadata
@@ -50,9 +52,10 @@ impl Checker {
             .unwrap(); // TODO
 
         let set = if let Some(set) = crate_infos.get(&artifact.package_id) {
-            if !set.kind.contains(&DepKind::Normal) {
-                return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
-            }
+            // TODO
+            // if !set.kind.contains(&DepKind::Normal) {
+            //     return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
+            // }
 
             set
         } else {
@@ -98,8 +101,6 @@ impl Checker {
 
         let allowed_caps = self.config.crate_caps(&crate_name);
 
-        let mut deduced_caps = deduce_caps_of_binary(&self.rules, bin_path)?;
-
         debug_assert_eq!(
             artifact.target.kind.len(),
             1,
@@ -108,7 +109,7 @@ impl Checker {
         );
         let artifact_kind = &artifact.target.kind[0];
 
-        if matches!(
+        let mut deduced_caps = if matches!(
             artifact_kind,
             &TargetKind::CustomBuild | &TargetKind::ProcMacro
         ) {
@@ -120,14 +121,13 @@ impl Checker {
                 TargetKind::ProcMacro => "proc-macro",
                 _ => unreachable!(),
             };
-            println!(
-                "{} executed a {} at {}",
-                package.name,
-                artifact_kind_name,
-                as_relative_path(&artifact.target.src_path)
-            );
-            return Ok(false);
-        }
+
+            let paths = RustParser::parse_file(&artifact.target.src_path)?.all_paths()?;
+
+            DeducedCapabilities::from_paths(&self.rules, paths.into_iter())?
+        } else {
+            deduce_caps_of_binary(&self.rules, bin_path)?
+        };
 
         deduced_caps.unknown_crates.clear();
 
@@ -256,9 +256,9 @@ impl Checker {
             // Why do we think this crate needs the `Any` capability?
             let mut info = format!("{}Any because of", Capability::Any.emoji());
             let max_width = 60;
-            for symbol in reasons.iter().reservoir_sample(5) {
+            for reason in reasons.iter().reservoir_sample(5) {
                 if info.len() < max_width {
-                    info += &format!(" {}", symbol.format(false));
+                    info += &format!(" {reason}");
                 } else {
                     info += " …";
                     break;
