@@ -27,6 +27,10 @@ impl CrateName {
 
         Ok(Self(normalized))
     }
+
+    pub fn is_standard_crate(&self) -> bool {
+        matches!(self.0.as_str(), "alloc" | "core" | "std")
+    }
 }
 
 impl std::fmt::Debug for CrateName {

@@ -50,17 +50,18 @@ impl CapsCommand {
         println!("Capability Analysis for: {}", self.binary_path);
         println!("═══════════════════════════════════════");
 
-        if capabilities.own_caps.is_empty() {
+        if capabilities.caps.is_empty() {
             println!("🔒 No specific capabilities detected");
         } else {
             println!("🔍 Detected Capabilities:");
             println!();
 
-            for (capability, reasons) in &capabilities.own_caps {
+            for (capability, reasons) in &capabilities.caps {
                 let icon = capability.emoji();
                 println!("  {icon} {capability:?}");
 
                 if (self.verbose || *capability == Capability::Any) && !reasons.is_empty() {
+                    // TODO: use format_reasons
                     println!("    Reasons ({}):", reasons.len());
                     for reason in reasons.iter().reservoir_sample(5) {
                         println!("      • {reason}");
@@ -74,9 +75,9 @@ impl CapsCommand {
         }
 
         // Show unknown crates
-        if !capabilities.unknown_crates.is_empty() {
+        if !capabilities.unresolved_crates.is_empty() {
             println!("❓ Unknown External Crates:");
-            for (crate_name, reasons) in &capabilities.unknown_crates {
+            for (crate_name, reasons) in &capabilities.unresolved_crates {
                 println!("  📦 {} ({} symbols)", crate_name, reasons.len());
                 if self.verbose {
                     for reason in reasons.iter().take(3) {
@@ -89,32 +90,5 @@ impl CapsCommand {
             }
             println!();
         }
-
-        // Show unknown symbols
-        if !capabilities.unknown_symbols.is_empty() {
-            println!(
-                "🤷 Unclassified Symbols: {}",
-                capabilities.unknown_symbols.len()
-            );
-            if self.verbose {
-                for symbol in capabilities.unknown_symbols.iter().take(10) {
-                    println!("  • {}", symbol.format(false));
-                }
-                if capabilities.unknown_symbols.len() > 10 {
-                    println!("  ... and {} more", capabilities.unknown_symbols.len() - 10);
-                }
-            }
-            println!();
-        }
-
-        // Summary
-        let total_capabilities = capabilities.own_caps.len();
-        let total_unknown_crates = capabilities.unknown_crates.len();
-        let total_unknown_symbols = capabilities.unknown_symbols.len();
-
-        println!("📊 Summary:");
-        println!("  • Capabilities detected: {total_capabilities}");
-        println!("  • External crates: {total_unknown_crates}");
-        println!("  • Unclassified symbols: {total_unknown_symbols}");
     }
 }

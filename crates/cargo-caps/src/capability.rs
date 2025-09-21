@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Context as _;
+use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CrateName, Symbol, cap_rule::SymbolRules, rust_path::RustPath, symbol::FunctionOrPath,
+    CrateName, Symbol, cap_rule::SymbolRules, reservoir_sample::ReservoirSampleExt as _,
+    rust_path::RustPath, symbol::FunctionOrPath,
 };
 
 pub type CapabilitySet = BTreeSet<Capability>;
@@ -93,17 +95,13 @@ impl Capability {
 
 #[derive(Clone, Debug, Default)]
 pub struct DeducedCaps {
-    /// The known capabilities of this crate
-    pub own_caps: BTreeMap<Capability, Reasons>,
+    /// The capabilities of this crate
+    pub caps: BTreeMap<Capability, Reasons>,
 
-    /// The crates we depend on that we know the capabilities of
-    pub known_crates: BTreeMap<CrateName, CapabilitySet>,
-
-    /// We couldn't classify these symbols
-    pub unknown_symbols: BTreeSet<Symbol>,
-
-    /// We need to resolve these crates to see what their capabilities are
-    pub unknown_crates: BTreeMap<CrateName, Reasons>,
+    /// We need to resolve these crates to see what their capabilities are.
+    ///
+    /// The value of the map is what indicated that we were using this crate in the first place.
+    pub unresolved_crates: BTreeMap<CrateName, BTreeSet<RustPath>>,
 }
 
 /// Why do we have this capability?
@@ -111,33 +109,37 @@ pub type Reasons = BTreeSet<Reason>;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reason {
-    Path(RustPath),
+    /// This path matches a rule. TODO: which rule? Where?
+    PathMatchedRule(RustPath),
 
-    Symbol(Symbol),
+    /// This symbol matches a rule. TODO: which rule? Where?
+    SymbolMatchedRule(Symbol),
 
     /// The reason we have this high capability is because we didn't succeed in understanding the source code.
     SourceParseError(String),
+
+    /// The reason we have this high capability is because we couldn't match this symbol to any rule.
+    ///
+    /// If you hit this, you need to extend `default_rules.eon`
+    UnmatchedSymbol(Symbol),
+
+    /// Path to `alloc`, `core`, or `std` that didn't match any rule in `default_rules.eon`.
+    UmatchedStandardPath(RustPath),
+
+    /// We have this capability because we depend on this crate, which has that capability.
+    Crate(CrateName),
 }
 
 impl std::fmt::Display for Reason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Path(path) => path.fmt(f),
-            Self::Symbol(symbol) => write!(f, "{}", symbol.format(false)),
+            Self::PathMatchedRule(path) | Self::UmatchedStandardPath(path) => path.fmt(f),
             Self::SourceParseError(err) => write!(f, "{err:#?}"),
+            Self::SymbolMatchedRule(symbol) | Self::UnmatchedSymbol(symbol) => {
+                write!(f, "{}", symbol.format(false))
+            }
+            Self::Crate(crate_name) => crate_name.fmt(f),
         }
-    }
-}
-
-impl From<RustPath> for Reason {
-    fn from(path: RustPath) -> Self {
-        Self::Path(path)
-    }
-}
-
-impl From<Symbol> for Reason {
-    fn from(symbol: Symbol) -> Self {
-        Self::Symbol(symbol)
     }
 }
 
@@ -164,35 +166,6 @@ impl DeducedCaps {
         Ok(slf)
     }
 
-    pub fn total_capabilities(&self) -> CapabilitySet {
-        let Self {
-            own_caps,
-            known_crates,
-            unknown_symbols,
-            unknown_crates,
-        } = self;
-
-        let mut total = BTreeSet::default();
-
-        for cap in own_caps.keys() {
-            total.insert(*cap);
-        }
-        for caps in known_crates.values() {
-            for &cap in caps {
-                total.insert(cap);
-            }
-        }
-        if !unknown_symbols.is_empty() || !unknown_crates.is_empty() {
-            total.insert(Capability::Any);
-        }
-
-        if total.contains(&Capability::Any) {
-            return std::iter::once(Capability::Any).collect();
-        }
-
-        total
-    }
-
     /// Capability from symbol
     fn add_symbol(&mut self, rules: &SymbolRules, symbol: &Symbol) -> anyhow::Result<()> {
         for path in symbol.paths() {
@@ -203,13 +176,16 @@ impl DeducedCaps {
                     // Check rules for the symbol
                     if let Some(capabilities) = rules.match_symbol(fun_name) {
                         for &capability in capabilities {
-                            self.own_caps
+                            self.caps
                                 .entry(capability)
                                 .or_default()
-                                .insert(Reason::from(symbol.clone()));
+                                .insert(Reason::SymbolMatchedRule(symbol.clone()));
                         }
                     } else {
-                        self.unknown_symbols.insert(symbol.clone());
+                        self.caps
+                            .entry(Capability::Any)
+                            .or_default()
+                            .insert(Reason::UnmatchedSymbol(symbol.clone()));
                     }
                 }
 
@@ -218,23 +194,31 @@ impl DeducedCaps {
                     // Check rules for the path
                     if let Some(capabilities) = rules.match_symbol(&path_str) {
                         for &capability in capabilities {
-                            self.own_caps
+                            self.caps
                                 .entry(capability)
                                 .or_default()
-                                .insert(Reason::from(symbol.clone()));
+                                .insert(Reason::PathMatchedRule(rust_path.clone()));
                         }
                     } else {
-                        // No rule matched - assume an external crate:
-                        let segments = rust_path.segments();
+                        // No rule matched
 
-                        let crate_name = segments[0];
-                        let crate_name = CrateName::new(crate_name)
+                        let segments = rust_path.segments();
+                        let crate_name = CrateName::new(segments[0])
                             .with_context(|| format!("mangled: {:?}", symbol.mangled))
                             .with_context(|| format!("demangled: {:?}", symbol.demangled))?;
-                        self.unknown_crates
-                            .entry(crate_name)
-                            .or_default()
-                            .insert(Reason::from(symbol.clone()));
+
+                        if crate_name.is_standard_crate() {
+                            self.caps
+                                .entry(Capability::Any)
+                                .or_default()
+                                .insert(Reason::UmatchedStandardPath(rust_path.clone()));
+                        } else {
+                            // assume an external crate:
+                            self.unresolved_crates
+                                .entry(crate_name)
+                                .or_default()
+                                .insert(rust_path);
+                        }
                     }
                 }
             }
@@ -248,10 +232,10 @@ impl DeducedCaps {
         // Check rules for the path
         if let Some(capabilities) = rules.match_symbol(&path_str) {
             for &capability in capabilities {
-                self.own_caps
+                self.caps
                     .entry(capability)
                     .or_default()
-                    .insert(Reason::from(rust_path.clone()));
+                    .insert(Reason::PathMatchedRule(rust_path.clone()));
             }
         } else {
             // No rule matched - assume an external crate:
@@ -260,12 +244,84 @@ impl DeducedCaps {
             let crate_name = segments[0];
             let crate_name =
                 CrateName::new(crate_name).with_context(|| format!("path: {rust_path}"))?;
-            self.unknown_crates
+            self.unresolved_crates
                 .entry(crate_name)
                 .or_default()
-                .insert(Reason::from(rust_path));
+                .insert(rust_path);
         }
 
         Ok(())
+    }
+}
+
+pub fn format_reasons(reasons: &Reasons) -> String {
+    let mut crates = vec![];
+    let mut path_matched_rules = vec![];
+    let mut symbol_matched_rules = vec![];
+    let mut unmatched_paths = vec![];
+    let mut unmatched_symbols = vec![];
+    let mut source_parse_errors = vec![];
+
+    for reason in reasons {
+        match reason {
+            Reason::Crate(crate_name) => {
+                crates.push(crate_name);
+            }
+            Reason::UmatchedStandardPath(path) => {
+                unmatched_paths.push(path);
+            }
+            Reason::UnmatchedSymbol(symbol) => {
+                unmatched_symbols.push(symbol);
+            }
+            Reason::PathMatchedRule(rust_path) => {
+                path_matched_rules.push(rust_path);
+            }
+            Reason::SymbolMatchedRule(symbol) => {
+                symbol_matched_rules.push(symbol);
+            }
+            Reason::SourceParseError(error) => {
+                source_parse_errors.push(error);
+            }
+        }
+    }
+
+    fn format_long_list<T: std::fmt::Display>(header: &str, reasons: &[T]) -> String {
+        let max_width = 60;
+        let mut string = format!("{header}:");
+        let mut num_left = reasons.len();
+        for reason in reasons.iter().reservoir_sample(5) {
+            if string.len() < max_width {
+                string += &format!(" {reason}");
+                num_left -= 1;
+            } else {
+                string += &format!(" … + {num_left} more");
+                break;
+            }
+        }
+        string
+    }
+
+    if !crates.is_empty() {
+        format_long_list("dependencies", &crates)
+    } else if !path_matched_rules.is_empty() {
+        format_long_list("rule for", &path_matched_rules)
+    } else if !symbol_matched_rules.is_empty() {
+        let symbol_matched_rules = symbol_matched_rules
+            .into_iter()
+            .map(|s| &s.demangled)
+            .collect_vec();
+        format_long_list("rule for", &symbol_matched_rules)
+    } else if !unmatched_paths.is_empty() {
+        format_long_list("unknown paths", &unmatched_paths)
+    } else if !unmatched_symbols.is_empty() {
+        let unmatched_symbols = unmatched_symbols
+            .into_iter()
+            .map(|s| &s.demangled)
+            .collect_vec();
+        format_long_list("unknwon symbols", &unmatched_symbols)
+    } else if !source_parse_errors.is_empty() {
+        format_long_list("source parse error", &source_parse_errors)
+    } else {
+        unreachable!()
     }
 }

@@ -4,9 +4,8 @@ use crate::{
     CrateName,
     build_graph_analysis::{DepKind, DepKindSet, has_build_rs},
     cap_rule::SymbolRules,
-    capability::{Capability, CapabilitySet, DeducedCaps, Reason},
+    capability::{Capability, CapabilitySet, DeducedCaps, Reason, format_reasons},
     config::WorkspaceConfig,
-    reservoir_sample::ReservoirSampleExt as _,
     src_analysis::ParsedRust,
 };
 use cargo_metadata::{
@@ -100,6 +99,7 @@ impl Checker {
             artifact.target.kind
         );
         let artifact_kind = &artifact.target.kind[0];
+
         let mut deduced_caps = if matches!(
             artifact_kind,
             &TargetKind::CustomBuild | &TargetKind::ProcMacro
@@ -120,7 +120,7 @@ impl Checker {
                 }
                 Err(err) => {
                     let mut deduced_caps = DeducedCaps::default();
-                    deduced_caps.own_caps.insert(
+                    deduced_caps.caps.insert(
                         Capability::Any,
                         std::iter::once(Reason::SourceParseError(format!("{err:#}"))).collect(),
                     );
@@ -130,7 +130,40 @@ impl Checker {
         } else {
             deduce_caps_of_binary(&self.rules, bin_path)?
         };
-        deduced_caps.unknown_crates.clear();
+
+        // Extend capabilities with the capabilities of our actual dependencies.
+        // TODO: we do it again below, but differently
+        for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unresolved_crates) {
+            if dep_crate_name == crate_name {
+                continue; // A crate can depend on itself
+            }
+            if let Some(crate_caps) = output.crate_caps.get(&dep_crate_name) {
+                if let Some(dep_caps) = crate_caps.get(&TargetKind::Lib) {
+                    // If a dependency has a capability, then so do we!
+                    for &cap in dep_caps.caps.keys() {
+                        deduced_caps
+                            .caps
+                            .entry(cap)
+                            .or_default()
+                            .insert(Reason::Crate(dep_crate_name.clone()));
+                    }
+                } else {
+                    // TODO: return error?
+                    println!(
+                        "{crate_name} depends on '{dep_crate_name}' (according to cargo-caps), but we have no Lib capabilities stored for it, only {:?}",
+                        crate_caps.keys()
+                    );
+                }
+            } else {
+                // We end up here for crates that produce no binaries, like `vec1`
+                // println!(
+                //     "{crate_name} depends on '{dep_crate_name}' (according to cargo-caps), but we have no knows capabilities for it"
+                // );
+            }
+        }
+
+        // Extend capabilities with the capabilities of our supposed dependencies.
+        // TODO: we do it already above, but differently
         let resolve = self.metadata.resolve.as_ref().unwrap();
         let node = resolve
             .nodes
@@ -147,26 +180,34 @@ impl Checker {
                 if let Some(crate_caps) = output.crate_caps.get(&dep_crate_name) {
                     if let Some(dep_caps) = crate_caps.get(&TargetKind::Lib) {
                         // If a dependency has a capability, then so do we!
-                        deduced_caps
-                            .known_crates
-                            .entry(dep_crate_name)
-                            .or_default()
-                            .extend(dep_caps.total_capabilities());
+                        for &cap in dep_caps.caps.keys() {
+                            deduced_caps
+                                .caps
+                                .entry(cap)
+                                .or_default()
+                                .insert(Reason::Crate(dep_crate_name.clone()));
+                        }
                     } else {
                         // TODO: return error?
                         println!(
-                            "{crate_name} depends on '{dep_crate_name}', but we have no Lib capabilities stored for it, only {:?}",
+                            "{crate_name} depends on '{dep_crate_name}' (according to cargo-metadata), but we have no Lib capabilities stored for it, only {:?}",
                             crate_caps.keys()
                         );
                     }
                 } else {
                     // TODO: figure out why we sometimes end up here
-                    // println!(
-                    //     "{crate_name} depends on '{dep_crate_name}' which we haven't compiled"
-                    // );
+                    println!(
+                        "{crate_name} depends on '{dep_crate_name}' (according to cargo-metadata) which we haven't compiled"
+                    );
                 }
             }
         }
+
+        if deduced_caps.caps.contains_key(&Capability::Any) {
+            // If we have the `Any` capability, all the others are uninteresting
+            deduced_caps.caps.retain(|key, _| key == &Capability::Any);
+        }
+
         Ok(deduced_caps)
     }
 
@@ -207,10 +248,7 @@ impl Checker {
             // Insert this _after_ storing it to self.crate_caps
             // so that it is not contagious.
             // TODO: should probably label proc-macros as dangerous too
-            deduced_caps
-                .own_caps
-                .entry(Capability::BuildRs)
-                .or_default();
+            deduced_caps.caps.entry(Capability::BuildRs).or_default();
         }
 
         let allowed_caps = self.config.crate_caps(&crate_name);
@@ -229,92 +267,21 @@ impl Checker {
             }
         };
 
-        let info = if !deduced_caps.unknown_symbols.is_empty() {
-            let symbol_names: Vec<String> = deduced_caps
-                .unknown_symbols
-                .iter()
-                .reservoir_sample(3)
-                .iter()
-                .map(|s| s.format(false))
-                .collect();
-            let symbol_text = if deduced_caps.unknown_symbols.len() > 3 {
-                format!("{}, …", symbol_names.join(", "))
-            } else {
-                symbol_names.join(", ")
-            };
-
+        let info = if let Some(reasons) = deduced_caps.caps.get(&Capability::Any) {
             format!(
-                "{}Any because of {} unknown symbol(s): {symbol_text}",
+                "{}Any because of {}",
                 Capability::Any.emoji(),
-                deduced_caps.unknown_symbols.len(),
+                format_reasons(reasons)
             )
-        } else if deduced_caps.own_caps.is_empty() {
-            let all_crate_deps: CapabilitySet = deduced_caps
-                .known_crates
-                .values()
-                .flatten()
-                .copied()
-                .collect();
-            let crate_deps = filter_capabilities(&all_crate_deps, &allowed_caps);
+        } else {
+            let filtered_caps = filter_capabilities(&deduced_caps, &allowed_caps);
 
-            if crate_deps.is_empty() {
+            if filtered_caps.is_empty() {
                 if self.show_empty {
                     "😌 none".to_owned()
                 } else {
                     return Ok(false); // TODO: respect verbose? maybe?
                 }
-            } else {
-                let cap_names: String = crate_deps
-                    .iter()
-                    .map(|cap| format!("{}{cap}", cap.emoji()))
-                    .join(", ");
-                format!("{cap_names} because of dependencies")
-            }
-        } else if let Some(reasons) = deduced_caps.own_caps.get(&Capability::Any) {
-            // Why do we think this crate needs the `Any` capability?
-            let mut info = format!("{}Any because of", Capability::Any.emoji());
-            let max_width = 60;
-            for reason in reasons.iter().reservoir_sample(5) {
-                if info.len() < max_width {
-                    info += &format!(" {reason}");
-                } else {
-                    info += " …";
-                    break;
-                }
-            }
-            info
-        } else {
-            // Filter out ignored capabilities
-            let total_caps = deduced_caps.total_capabilities();
-            let filtered_caps = filter_capabilities(&total_caps, &allowed_caps);
-
-            // Check if we should skip this crate (no capabilities after filtering)
-            if filtered_caps.is_empty() && !self.show_empty {
-                return Ok(false); // TODO: respect verbose? maybe?
-            }
-
-            // Print short description using filtered capabilities
-            if filtered_caps.is_empty() {
-                "😌 none".to_owned()
-            } else if filtered_caps.contains(&Capability::Any) {
-                // If "Any" is present, show only that
-                let reasons = deduced_caps
-                    .known_crates
-                    .iter()
-                    .filter_map(|(name, caps)| {
-                        caps.contains(&Capability::Any).then_some(name.clone())
-                    })
-                    .collect_vec();
-                let dep_word = if reasons.len() == 1 {
-                    "dependency"
-                } else {
-                    "dependencies"
-                };
-                let reasons = reasons.iter().join(", ");
-                format!(
-                    "{}Any because of {dep_word} on {reasons}",
-                    Capability::Any.emoji()
-                )
             } else {
                 let cap_names: Vec<String> = filtered_caps
                     .iter()
@@ -349,8 +316,8 @@ impl Checker {
                     .and_then(|crate_caps| crate_caps.get(&TargetKind::CustomBuild));
                 if let Some(build_rs_caps) = build_rs_caps {
                     println!(
-                        "  {crate_name} build.rs hcapabilities: {}",
-                        build_rs_caps.total_capabilities().iter().join(", ")
+                        "  {crate_name} build.rs capabilities: {}",
+                        build_rs_caps.caps.keys().join(", ")
                     );
                 } else {
                     println!("  Missing capabilities for build.rs of {crate_name}");
@@ -375,13 +342,13 @@ fn as_relative_path(path: &Utf8Path) -> &Utf8Path {
 }
 
 /// Filter capabilities by removing allowed ones, keeping only the non-allowed ones.
-fn filter_capabilities(actual_caps: &CapabilitySet, allowed_caps: &CapabilitySet) -> CapabilitySet {
+fn filter_capabilities(actual_caps: &DeducedCaps, allowed_caps: &CapabilitySet) -> CapabilitySet {
+    let actual_caps: CapabilitySet = actual_caps.caps.keys().copied().collect();
+
     if allowed_caps.contains(&Capability::Any) {
         CapabilitySet::default()
     } else if actual_caps.contains(&Capability::Any) {
-        let mut result = CapabilitySet::new();
-        result.insert(Capability::Any);
-        result
+        std::iter::once(Capability::Any).collect()
     } else {
         actual_caps
             .iter()
