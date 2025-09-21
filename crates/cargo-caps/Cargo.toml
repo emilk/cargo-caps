@@ -38,3 +38,5 @@ regex.workspace = true
 rustc-demangle.workspace = true
 serde_json.workspace = true
 serde.workspace = true
+syn = { workspace = true, features = ["full", "visit"] }
+proc-macro2 = { version = "1.0.101", features = ["span-locations"] }

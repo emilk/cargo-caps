@@ -358,6 +358,7 @@ rules: [
 		caps: ["alloc", "panic", "sysinfo"]
 		patterns: [
 			"std::env::*"
+			"std::sys::args::*"
 			"std::sys::backtrace::*"
 			"std::sys::env::*"
 			"std::sys::io::is_terminal::*"

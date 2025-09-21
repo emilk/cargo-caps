@@ -25,6 +25,7 @@ mod demangle;
 mod print;
 mod reservoir_sample;
 mod rust_path;
+pub mod src_analysis; // TODO: not pub
 mod symbol;
 mod tree;
 
