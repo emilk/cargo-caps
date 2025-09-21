@@ -1,5 +1,6 @@
-use std::fmt;
-use std::ops::Deref;
+use std::{fmt, ops::Deref};
+
+use itertools::Itertools as _;
 /// A Rust module or item path like `std::collections::Vec` or `my_crate::module::function`.
 ///
 /// This struct encapsulates a path string and provides utilities for working with
@@ -12,6 +13,24 @@ impl RustPath {
     pub fn new(path: impl Into<String>) -> Self {
         let path = path.into();
         Self(path)
+    }
+
+    pub fn from_segments(segments: impl IntoIterator<Item = String>) -> Self {
+        Self::new(segments.into_iter().join("::"))
+    }
+
+    #[must_use]
+    pub fn with_segment(mut self, segment: impl Into<String>) -> Self {
+        self.push_segment(segment);
+        self
+    }
+
+    pub fn push_segment(&mut self, segment: impl Into<String>) {
+        if self.0.is_empty() {
+            self.0 = segment.into();
+        } else {
+            self.0 = format!("{}::{}", self.0, segment.into());
+        }
     }
 
     /// Finds all `RustPath`:s in the given string with at least two segments.
