@@ -8,14 +8,14 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/emilk/cargo-caps"
 rust-version = "1.89"
-version = "0.0.1"
+version = "0.0.2"
 
 [workspace.dependencies]
 anyhow = "1.0.100"
 ar = "0.9"
 cargo_metadata = "0.22"
 clap = { version = "4.5.48", features = ["derive"] }
-cpp_demangle = "0.4"
+cpp_demangle = "0.5"
 env_logger = "0.11.8"
 eon = "0.2"
 itertools = "0.14"

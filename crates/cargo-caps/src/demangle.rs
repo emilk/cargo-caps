@@ -1,6 +1,9 @@
 pub fn demangle_symbol(name: &str) -> String {
-    let mut demangled = if let Ok(demangled) = cpp_demangle::Symbol::new(name) {
-        decode_rust_type(&demangled.to_string())
+    let mut demangled = if let Some(demangled) = cpp_demangle::Symbol::new(name)
+        .ok()
+        .and_then(|symbol| symbol.demangle().ok())
+    {
+        decode_rust_type(&demangled)
     } else if let Ok(demangled) = rustc_demangle::try_demangle(name) {
         decode_rust_type(&demangled.to_string())
     } else if let Some(manual_demangled) = try_manual_demangle(name) {
