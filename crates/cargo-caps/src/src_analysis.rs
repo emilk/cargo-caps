@@ -249,7 +249,7 @@ impl<'ast> Visit<'ast> for ParserState {
     }
 
     fn visit_attribute(&mut self, input: &'ast syn::Attribute) {
-        #[expect(clippy::match_same_arms)]
+        #[expect(clippy::match_same_arms, reason = "We will add more cases later")]
         match &input.meta {
             syn::Meta::Path(_) => {
                 // e.g. `#[test]`
