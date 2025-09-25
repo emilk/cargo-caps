@@ -103,6 +103,9 @@ If you want this sort of fine-grained capabilities, I suggest you take a look at
 Perhaps only a single function in a crate uses the file system, and you aren't calling that.
 The crate will still be labeles as using the `fs` capability.
 
+Macros produce can make `cargo-deny` point the finger at the wrong crate.
+For instance, if a `simple_log!` macro actually spawns a thread and starts a network connection, then the `net` capability will show up for the crate _calling_ `simple_log!`, as opposed to the crate `defining` it.
+
 `cargo-deny` is not perfect, but it can still be a useful layer of defence.
 
 
