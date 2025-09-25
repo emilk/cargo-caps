@@ -78,6 +78,10 @@ The source analyzer works only for simple `build.rs` files (which are most of th
 For more complex things, you the user will have to manually audit (or trust).
 To help, `cargo-caps` will print the path to the source code so you can more easily find and read the code.
 
+## TODO:
+* Do source code analysis to find and flag all `unsafe`
+  * (with `unsafe` a crate can potentially do any evil sys-call)
+
 ## Capabilities
 `cargo-caps` currently can distinguish between the following capabilities:
 - `alloc` - allocate memory (applied to everything in `std`)
