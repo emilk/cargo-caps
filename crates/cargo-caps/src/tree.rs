@@ -28,6 +28,10 @@ impl Tree {
     }
 
     /// Collapse nodes that contain only a single leaf, recursively
+    #[expect(
+        clippy::expect_used,
+        reason = "Child node should exist since we checked children.len() == 1"
+    )]
     pub fn collapse_single_nodes(self, depth: usize, may_collapse: bool) -> Self {
         match self {
             Self::Leaf(_) => self,

@@ -120,7 +120,10 @@ fn collect_file_symbols(all_symbols: &mut Vec<Symbol>, file: &object::File<'_>) 
                 ObjectSymbolScope::Dynamic => SymbolScope::Dynamic,
             };
 
-            #[expect(clippy::match_same_arms)]
+            #[expect(
+                clippy::match_same_arms,
+                reason = "For readability, we want to list all cases"
+            )]
             let kind = match symbol.kind() {
                 ObjectSymbolKind::Unknown => SymbolKind::Unknown,
                 ObjectSymbolKind::Text => SymbolKind::Text,
