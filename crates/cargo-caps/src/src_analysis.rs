@@ -1,7 +1,7 @@
 //! The point of this crate is to parse _simple_ `build.rs` files
 //! and extract all [`RustPath`]s used in them.
 //!
-//! This is because the normal symbol-extration we use for libraries
+//! This is because the normal symbol-extraction we use for libraries
 //! does not (yet) work for executables, because they tend to pull in
 //! _a lot_ of unrelated symbols (TODO: consider calling strip on them???)
 //!

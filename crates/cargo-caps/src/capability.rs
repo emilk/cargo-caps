@@ -318,7 +318,7 @@ pub fn format_reasons(reasons: &Reasons) -> String {
             .into_iter()
             .map(|s| &s.demangled)
             .collect_vec();
-        format_long_list("unknwon symbols", &unmatched_symbols)
+        format_long_list("unknown symbols", &unmatched_symbols)
     } else if !source_parse_errors.is_empty() {
         format_long_list("source parse error", &source_parse_errors)
     } else {

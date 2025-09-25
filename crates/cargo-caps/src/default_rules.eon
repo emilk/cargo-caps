@@ -93,7 +93,7 @@ rules: [
 			"getentropy"
 			"rustc_proc_macro_decls_*"
 
-			// get/set flaoting point rounding mode
+			// get/set floating point rounding mode
 			"fegetround"
 			"fesetround"
 

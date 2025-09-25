@@ -7,11 +7,18 @@ Anyone depending on that crate (directly or indirectly) would be vulnerable.
 But running `cargo-caps check` you get an error (on CI or locally),
 and in the output you see that the `super_nice_xml_parser` crate suddenly has new capabilities of `thread` and `net`.
 
-## Warning
-Only tested on macOS.
-Some of the code was AI generated and has not yet been vetted by human eyes.
-Half-finished.
-Not ready for production.
+In short: `cargo-caps` is a useful tool for auditing 3rd party crates.
+
+## ⚠️ Warning - Experimental!
+* Only tested on macOS
+* Some of the code was AI generated and has not yet been vetted by human eyes
+* Half-finished
+* Not ready for production
+
+## Related projects
+* [cargo-audit](https://crates.io/crates/cargo-audit) - scans dependency tree for RUSTSEC advisories
+* [cargo-supply-chain](https://github.com/rust-secure-code/cargo-supply-chain) - _who_ are you trusting?
+* [cargo-vet](https://github.com/mozilla/cargo-vet) - can be used to mark crates as "vetted" (audited)
 
 ## Design goals
 * Fail safe: if `cargo-caps` can't understand it then assume the worst
@@ -49,6 +56,7 @@ You can configure exactly what each dependency is allowed in a `cargo-deny.eon` 
 You can then run `cargo-deny check` to check if any dependency does more than it is allowed to.
 
 ## How it works
+### Symbol analyzer
 `cargo-caps check` will run `cargo build` and then analyze the linker symbols of each built library.
 Based on these symbols `cargo-caps` will then infer _capabilities_ of each library.
 
@@ -59,6 +67,14 @@ See [`default_rules.ron`](crates/cargo-caps/src/default_rules.ron) for how diffe
 Any unknown symbol will lead to the crate being assigned the capability of `any` (fail-safe).
 
 TODO: consider splitting out an `unknown` capability from `any`.
+
+### Source analyzer
+A lot of crates have `build.rs` files that have the possibility to do anything.
+But `build.rs` files gets compiled to binaries, making analyzing their symbols a lot harder (they just pull in a lot more by default).
+Therefore `cargo-caps` will instead parse `build.rs` files (using [`syn`](crates.io/crates/syn)).
+The source analyzer works only for simple `build.rs` files (which are most of them).
+For more complex things, you the user will have to manually audit (or trust).
+To help, `cargo-caps` will print the path to the source code so you can more easily find and read the code.
 
 ## Capabilities
 `cargo-caps` currently can distinguish between the following capabilities:
