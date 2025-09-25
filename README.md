@@ -19,6 +19,7 @@ In short: `cargo-caps` is a useful tool for auditing 3rd party crates.
 * [cap-std](https://github.com/bytecodealliance/cap-std) - a capability-based library for things like filesystem and network access
 * [cargo-audit-build](https://github.com/tmpfs/cargo-audit-build/) - tool for auditing `build.rs` files
 * [cargo-audit](https://crates.io/crates/cargo-audit) - scans dependency tree for RUSTSEC advisories
+* [cargo-geiger](https://github.com/geiger-rs/cargo-geiger) - find usage of `unsafe` in crate tree
 * [cargo-supply-chain](https://github.com/rust-secure-code/cargo-supply-chain) - who are you trusting?
 * [cargo-vet](https://github.com/mozilla/cargo-vet) - can be used to mark crates as "vetted" (audited)
 
