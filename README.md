@@ -110,6 +110,7 @@ The crate will still be labeles as using the `fs` capability.
 
 Macros produce can make `cargo-deny` point the finger at the wrong crate.
 For instance, if a `simple_log!` macro actually spawns a thread and starts a network connection, then the `net` capability will show up for the crate _calling_ `simple_log!`, as opposed to the crate `defining` it.
+In theory we should be able to expand all macros at the call site and analyze the resulting code, but that's not something cargo-caps currently does.
 
 `cargo-deny` is not perfect, but it can still be a useful layer of defence.
 

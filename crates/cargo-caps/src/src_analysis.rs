@@ -8,10 +8,13 @@
 //! TODO: make sure this things fails _safe_, i.e. that unreqcognized syntax
 //! leads to an error rather than to assumling the build.rs is safe.
 
-use std::{collections::BTreeSet, fs};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    fs,
+};
 
 use anyhow::Context as _;
-use cargo_metadata::camino::Utf8Path;
+use cargo_metadata::camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools as _;
 use proc_macro2::Span;
 use syn::{Type, UseTree, punctuated::Punctuated, spanned::Spanned as _, visit::Visit};
@@ -28,22 +31,56 @@ impl ParsedRust {
     pub fn parse_file<P: AsRef<Utf8Path>>(path: P) -> anyhow::Result<Self> {
         let path = path.as_ref();
         log::debug!("Parsing {path}");
-        let content = fs::read_to_string(path).with_context(|| path.to_string())?;
-        Self::parse_content(&content).with_context(|| path.to_string())
+
+        let mut all_paths = BTreeSet::new();
+        let mut file_queue = VecDeque::new();
+        let mut processed_files = BTreeSet::new();
+
+        file_queue.push_back(path.to_path_buf());
+
+        while let Some(current_file) = file_queue.pop_front() {
+            if processed_files.contains(&current_file) {
+                continue;
+            }
+            processed_files.insert(current_file.clone());
+
+            log::debug!("Processing file: {current_file}");
+            let content =
+                fs::read_to_string(&current_file).with_context(|| current_file.to_string())?;
+
+            let ParserState {
+                all_paths: file_paths,
+                unsupported,
+                module_queue,
+                imports: _, // Used up
+                current_file: _,
+            } = ParserState::parse_content(&content, &current_file)?;
+
+            if !unsupported.is_empty() {
+                anyhow::bail!(
+                    "Source code contained syntax that cargo-caps is too dumb to understand: {}",
+                    format_unsupported(&unsupported)
+                );
+            }
+
+            all_paths.extend(file_paths);
+            file_queue.extend(module_queue);
+        }
+
+        Ok(Self { all_paths })
     }
 
     /// Parse Rust source code content and return external usage information
     fn parse_content(rust_source: &str) -> anyhow::Result<Self> {
+        // This method is kept for backward compatibility but now uses the current directory
+        let current_dir = Utf8PathBuf::from(".");
         let ParserState {
             all_paths,
             unsupported,
-            has_external_mods,
+            module_queue: _,
             imports: _, // Used up
-        } = ParserState::parse_content(rust_source)?;
-
-        if has_external_mods {
-            anyhow::bail!("cargo-caps doesn't support loading other module files");
-        }
+            current_file: _,
+        } = ParserState::parse_content(rust_source, &current_dir)?;
 
         if !unsupported.is_empty() {
             anyhow::bail!(
@@ -93,17 +130,24 @@ struct ParserState {
     /// we can't trust the source code.
     unsupported: Vec<Span>,
 
-    has_external_mods: bool,
+    /// Queue of module files to be processed.
+    module_queue: Vec<Utf8PathBuf>,
 
     /// Imports. Used during parsing.
     imports: Vec<Import>,
+
+    /// Current file being parsed (used for resolving module paths).
+    current_file: Utf8PathBuf,
 }
 
 impl ParserState {
     /// Parse Rust source code content and return external usage information
-    fn parse_content(rust_source: &str) -> anyhow::Result<Self> {
+    fn parse_content(rust_source: &str, current_file: &Utf8Path) -> anyhow::Result<Self> {
         let syntax_tree = syn::parse_file(rust_source)?;
-        let mut usage = Self::default();
+        let mut usage = Self {
+            current_file: current_file.to_path_buf(),
+            ..Self::default()
+        };
         usage.visit_file(&syntax_tree);
 
         Ok(usage)
@@ -195,8 +239,26 @@ fn as_rust_path(syn_path: &syn::Path) -> RustPath {
 impl<'ast> Visit<'ast> for ParserState {
     fn visit_item_mod(&mut self, item_mod: &'ast syn::ItemMod) {
         if item_mod.content.is_none() {
-            self.has_external_mods = true;
+            // This is an external module declaration (e.g., `mod foo;`)
+            let module_name = item_mod.ident.to_string();
+
+            let current_dir = self
+                .current_file
+                .parent()
+                .unwrap_or_else(|| Utf8Path::new("."));
+
+            let candidates = [
+                current_dir.join(format!("{module_name}.rs")),
+                current_dir.join(&module_name).join("mod.rs"),
+            ];
+
+            for candidate in candidates {
+                if candidate.exists() {
+                    self.module_queue.push(candidate);
+                }
+            }
         }
+
         // Continue visiting nested items
         syn::visit::visit_item_mod(self, item_mod);
     }
