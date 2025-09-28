@@ -19,11 +19,14 @@ use itertools::Itertools as _;
 use proc_macro2::Span;
 use syn::{Type, UseTree, punctuated::Punctuated, spanned::Spanned as _, visit::Visit};
 
-use crate::rust_path::RustPath;
+use crate::{rust_path::RustPath, capability::Capability};
 
 pub struct ParsedRust {
     /// All full (absolute) paths we detected.
     pub all_paths: BTreeSet<RustPath>,
+
+    /// All capabilities we detected.
+    pub capabilities: BTreeSet<Capability>,
 }
 
 impl ParsedRust {
@@ -33,6 +36,7 @@ impl ParsedRust {
         log::debug!("Parsing {path}");
 
         let mut all_paths = BTreeSet::new();
+        let mut all_capabilities = BTreeSet::new();
         let mut file_queue = VecDeque::new();
         let mut processed_files = BTreeSet::new();
 
@@ -52,6 +56,7 @@ impl ParsedRust {
                 all_paths: file_paths,
                 unsupported,
                 module_queue,
+                capabilities,
                 imports: _, // Used up
                 current_file: _,
             } = ParserState::parse_content(&content, &current_file)?;
@@ -64,10 +69,14 @@ impl ParsedRust {
             }
 
             all_paths.extend(file_paths);
+            all_capabilities.extend(capabilities);
             file_queue.extend(module_queue);
         }
 
-        Ok(Self { all_paths })
+        Ok(Self {
+            all_paths,
+            capabilities: all_capabilities,
+        })
     }
 
     /// Parse Rust source code content and return external usage information
@@ -78,6 +87,7 @@ impl ParsedRust {
             all_paths,
             unsupported,
             module_queue: _,
+            capabilities,
             imports: _, // Used up
             current_file: _,
         } = ParserState::parse_content(rust_source, &current_dir)?;
@@ -89,7 +99,7 @@ impl ParsedRust {
             )
         }
 
-        Ok(Self { all_paths })
+        Ok(Self { all_paths, capabilities })
     }
 }
 
@@ -132,6 +142,9 @@ struct ParserState {
 
     /// Queue of module files to be processed.
     module_queue: Vec<Utf8PathBuf>,
+
+    /// Capabilities we detected in the code.
+    capabilities: BTreeSet<Capability>,
 
     /// Imports. Used during parsing.
     imports: Vec<Import>,
@@ -261,6 +274,23 @@ impl<'ast> Visit<'ast> for ParserState {
 
         // Continue visiting nested items
         syn::visit::visit_item_mod(self, item_mod);
+    }
+
+    fn visit_item_fn(&mut self, item_fn: &'ast syn::ItemFn) {
+        // Check if function is unsafe
+        if item_fn.sig.unsafety.is_some() {
+            self.capabilities.insert(Capability::Unsafe);
+        }
+        // Continue visiting nested items
+        syn::visit::visit_item_fn(self, item_fn);
+    }
+
+
+    fn visit_expr_unsafe(&mut self, expr_unsafe: &'ast syn::ExprUnsafe) {
+        // This handles unsafe expressions like `unsafe { ... }`
+        self.capabilities.insert(Capability::Unsafe);
+        // Continue visiting nested items
+        syn::visit::visit_expr_unsafe(self, expr_unsafe);
     }
 
     /// Visit use items (use statements)
@@ -397,5 +427,39 @@ mod tests {
                 "tokio::runtime::Runtime::new",
             ]
         );
+    }
+
+    #[test]
+    fn test_unsafe_detection() {
+        let content_with_unsafe_fn = r#"
+            unsafe fn dangerous_function() {
+                // This is an unsafe function
+            }
+        "#;
+
+        let content_with_unsafe_block = r#"
+            fn main() {
+                let raw_ptr = 0x123 as *const i32;
+                let value = unsafe { *raw_ptr };
+            }
+        "#;
+
+        let content_without_unsafe = r#"
+            fn safe_function() {
+                println!("This is safe");
+            }
+        "#;
+
+        // Test unsafe function
+        let result = ParsedRust::parse_content(content_with_unsafe_fn).unwrap();
+        assert!(result.capabilities.contains(&Capability::Unsafe), "Should detect unsafe function");
+
+        // Test unsafe block
+        let result = ParsedRust::parse_content(content_with_unsafe_block).unwrap();
+        assert!(result.capabilities.contains(&Capability::Unsafe), "Should detect unsafe block");
+
+        // Test safe code
+        let result = ParsedRust::parse_content(content_without_unsafe).unwrap();
+        assert!(!result.capabilities.contains(&Capability::Unsafe), "Should not detect unsafe in safe code");
     }
 }

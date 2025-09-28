@@ -115,7 +115,7 @@ impl Checker {
 
             match ParsedRust::parse_file(&artifact.target.src_path) {
                 Ok(parsed) => {
-                    let ParsedRust { all_paths } = parsed;
+                    let ParsedRust { all_paths, capabilities: _ } = parsed;
                     DeducedCaps::from_paths(&self.rules, all_paths.into_iter())?
                 }
                 Err(err) => {

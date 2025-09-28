@@ -56,6 +56,10 @@ pub enum Capability {
 
     // -------------------------------
     // Dangerous ones:
+    /// Contains unsafe code blocks or functions
+    #[serde(rename = "unsafe")]
+    Unsafe,
+
     /// May call any CLI command
     #[serde(rename = "command")]
     Command,
@@ -83,7 +87,7 @@ impl Capability {
             | Self::Net
             | Self::FS => false,
 
-            Self::Command | Self::Unknown | Self::Wildcard => true,
+            Self::Unsafe | Self::Command | Self::Unknown | Self::Wildcard => true,
         }
     }
 }
@@ -100,6 +104,7 @@ impl std::fmt::Display for Capability {
             Self::Thread => write!(f, "thread"),
             Self::Net => write!(f, "net"),
             Self::FS => write!(f, "fs"),
+            Self::Unsafe => write!(f, "unsafe"),
             Self::Command => write!(f, "command"),
             Self::Unknown => write!(f, "unknown"),
             Self::Wildcard => write!(f, "*"),
@@ -119,6 +124,7 @@ impl Capability {
             Self::Thread => "🧵",
             Self::Net => "🌐",
             Self::FS => "📁",
+            Self::Unsafe => "⚡",
             Self::Command => "⚠️ ",
             Self::Unknown => "❓",
             Self::Wildcard => "🃏 ", // TODO: its own symbol?
