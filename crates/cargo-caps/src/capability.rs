@@ -54,9 +54,38 @@ pub enum Capability {
     #[serde(rename = "fs")]
     FS,
 
-    /// Anything is possible, including everything else in this enum.
+    // -------------------------------
+    // Dangerous ones:
+    /// May call any CLI command
+    #[serde(rename = "command")]
+    Command,
+
+    /// We don't know
+    #[serde(rename = "unknown")]
+    Unknown,
+
+    /// Only used as an "allow" rule
     #[serde(rename = "*")]
-    Any,
+    Wildcard,
+}
+
+impl Capability {
+    /// Any capability that is "critical" could theoretically lead to all other capapbilities.
+    pub fn is_critical(&self) -> bool {
+        match self {
+            Self::BuildRs
+            | Self::Alloc
+            | Self::Panic
+            | Self::Time
+            | Self::Sysinfo
+            | Self::Stdio
+            | Self::Thread
+            | Self::Net
+            | Self::FS => false,
+
+            Self::Command | Self::Unknown | Self::Wildcard => true,
+        }
+    }
 }
 
 impl std::fmt::Display for Capability {
@@ -71,7 +100,9 @@ impl std::fmt::Display for Capability {
             Self::Thread => write!(f, "thread"),
             Self::Net => write!(f, "net"),
             Self::FS => write!(f, "fs"),
-            Self::Any => write!(f, "any"),
+            Self::Command => write!(f, "command"),
+            Self::Unknown => write!(f, "unknown"),
+            Self::Wildcard => write!(f, "*"),
         }
     }
 }
@@ -88,7 +119,9 @@ impl Capability {
             Self::Thread => "🧵",
             Self::Net => "🌐",
             Self::FS => "📁",
-            Self::Any => "⚠️ ",
+            Self::Command => "⚠️ ",
+            Self::Unknown => "❓",
+            Self::Wildcard => "🃏 ", // TODO: its own symbol?
         }
     }
 }
@@ -183,7 +216,7 @@ impl DeducedCaps {
                         }
                     } else {
                         self.caps
-                            .entry(Capability::Any)
+                            .entry(Capability::Unknown)
                             .or_default()
                             .insert(Reason::UnmatchedSymbol(symbol.clone()));
                     }
@@ -209,7 +242,7 @@ impl DeducedCaps {
 
                         if crate_name.is_standard_crate() {
                             self.caps
-                                .entry(Capability::Any)
+                                .entry(Capability::Unknown)
                                 .or_default()
                                 .insert(Reason::UmatchedStandardPath(rust_path.clone()));
                         } else {

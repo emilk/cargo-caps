@@ -121,7 +121,7 @@ impl Checker {
                 Err(err) => {
                     let mut deduced_caps = DeducedCaps::default();
                     deduced_caps.caps.insert(
-                        Capability::Any,
+                        Capability::Unknown,
                         std::iter::once(Reason::SourceParseError(format!("{err:#}"))).collect(),
                     );
                     deduced_caps
@@ -203,9 +203,9 @@ impl Checker {
             }
         }
 
-        if deduced_caps.caps.contains_key(&Capability::Any) {
-            // If we have the `Any` capability, all the others are uninteresting
-            deduced_caps.caps.retain(|key, _| key == &Capability::Any);
+        if deduced_caps.caps.keys().any(Capability::is_critical) {
+            // If we have critical capabilities, all the others are uninteresting
+            deduced_caps.caps.retain(|key, _| key.is_critical());
         }
 
         Ok(deduced_caps)
@@ -267,12 +267,15 @@ impl Checker {
             }
         };
 
-        let info = if let Some(reasons) = deduced_caps.caps.get(&Capability::Any) {
-            format!(
-                "{}Any because of {}",
-                Capability::Any.emoji(),
-                format_reasons(reasons)
-            )
+        let criticals = deduced_caps
+            .caps
+            .iter()
+            .filter(|(c, _)| c.is_critical())
+            .map(|(c, reasons)| format!("{} {c} because of {}", c.emoji(), format_reasons(reasons)))
+            .collect_vec();
+
+        let info = if !criticals.is_empty() {
+            criticals.join(", ")
         } else {
             let filtered_caps = filter_capabilities(&deduced_caps, &allowed_caps);
 
@@ -345,10 +348,8 @@ fn as_relative_path(path: &Utf8Path) -> &Utf8Path {
 fn filter_capabilities(actual_caps: &DeducedCaps, allowed_caps: &CapabilitySet) -> CapabilitySet {
     let actual_caps: CapabilitySet = actual_caps.caps.keys().copied().collect();
 
-    if allowed_caps.contains(&Capability::Any) {
+    if allowed_caps.contains(&Capability::Wildcard) {
         CapabilitySet::default()
-    } else if actual_caps.contains(&Capability::Any) {
-        std::iter::once(Capability::Any).collect()
     } else {
         actual_caps
             .iter()

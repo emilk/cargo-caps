@@ -418,15 +418,9 @@ rules: [
 		]
 	}
 	{
-		// Things we know allow the user to do _anything_
-		caps: ["*"]
-		patterns: ["std::process::*", "std::sys::process"]
+		caps: ["command"]
+		patterns: ["std::process::*", "std::sys::process::*"]
 	}
-	{
-		// TODO: categorize the rest of std:: :)
-		caps: [
-			"*" // conservatively assume the worst
-		]
-		patterns: ["std::*"]
-	}
+
+	// TODO: categorize the rest of std:: :)
 ]

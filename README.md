@@ -69,8 +69,6 @@ See [`default_rules.ron`](crates/cargo-caps/src/default_rules.ron) for how diffe
 
 Any unknown symbol will lead to the crate being assigned the capability of `any` (fail-safe).
 
-TODO: consider splitting out an `unknown` capability from `any`.
-
 ### Source analyzer
 A lot of crates have `build.rs` files that have the possibility to do anything.
 But `build.rs` files gets compiled to binaries, making analyzing their symbols a lot harder (they just pull in a lot more by default).

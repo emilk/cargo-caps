@@ -60,7 +60,7 @@ impl CapsCommand {
                 let icon = capability.emoji();
                 println!("  {icon} {capability:?}");
 
-                if (self.verbose || *capability == Capability::Any) && !reasons.is_empty() {
+                if (self.verbose || capability.is_critical()) && !reasons.is_empty() {
                     // TODO: use format_reasons
                     println!("    Reasons ({}):", reasons.len());
                     for reason in reasons.iter().reservoir_sample(5) {
