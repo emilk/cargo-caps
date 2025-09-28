@@ -9,7 +9,7 @@
 //! leads to an error rather than to assumling the build.rs is safe.
 
 use std::{
-    collections::{BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
 };
 
@@ -19,14 +19,17 @@ use itertools::Itertools as _;
 use proc_macro2::Span;
 use syn::{Type, UseTree, punctuated::Punctuated, spanned::Spanned as _, visit::Visit};
 
-use crate::{rust_path::RustPath, capability::Capability};
+use crate::{
+    capability::{Capability, Reason, Reasons},
+    rust_path::RustPath,
+};
 
 pub struct ParsedRust {
     /// All full (absolute) paths we detected.
     pub all_paths: BTreeSet<RustPath>,
 
     /// All capabilities we detected.
-    pub capabilities: BTreeSet<Capability>,
+    pub capabilities: BTreeMap<Capability, Reasons>,
 }
 
 impl ParsedRust {
@@ -36,7 +39,7 @@ impl ParsedRust {
         log::debug!("Parsing {path}");
 
         let mut all_paths = BTreeSet::new();
-        let mut all_capabilities = BTreeSet::new();
+        let mut all_capabilities: BTreeMap<Capability, Reasons> = BTreeMap::new();
         let mut file_queue = VecDeque::new();
         let mut processed_files = BTreeSet::new();
 
@@ -69,7 +72,12 @@ impl ParsedRust {
             }
 
             all_paths.extend(file_paths);
-            all_capabilities.extend(capabilities);
+            for (capability, reasons) in capabilities {
+                all_capabilities
+                    .entry(capability)
+                    .or_default()
+                    .extend(reasons);
+            }
             file_queue.extend(module_queue);
         }
 
@@ -99,7 +107,10 @@ impl ParsedRust {
             )
         }
 
-        Ok(Self { all_paths, capabilities })
+        Ok(Self {
+            all_paths,
+            capabilities,
+        })
     }
 }
 
@@ -144,7 +155,7 @@ struct ParserState {
     module_queue: Vec<Utf8PathBuf>,
 
     /// Capabilities we detected in the code.
-    capabilities: BTreeSet<Capability>,
+    capabilities: BTreeMap<Capability, Reasons>,
 
     /// Imports. Used during parsing.
     imports: Vec<Import>,
@@ -279,16 +290,21 @@ impl<'ast> Visit<'ast> for ParserState {
     fn visit_item_fn(&mut self, item_fn: &'ast syn::ItemFn) {
         // Check if function is unsafe
         if item_fn.sig.unsafety.is_some() {
-            self.capabilities.insert(Capability::Unsafe);
+            self.capabilities
+                .entry(Capability::Unsafe)
+                .or_default()
+                .insert(Reason::SourceCodeAnalysis);
         }
         // Continue visiting nested items
         syn::visit::visit_item_fn(self, item_fn);
     }
 
-
     fn visit_expr_unsafe(&mut self, expr_unsafe: &'ast syn::ExprUnsafe) {
         // This handles unsafe expressions like `unsafe { ... }`
-        self.capabilities.insert(Capability::Unsafe);
+        self.capabilities
+            .entry(Capability::Unsafe)
+            .or_default()
+            .insert(Reason::SourceCodeAnalysis);
         // Continue visiting nested items
         syn::visit::visit_expr_unsafe(self, expr_unsafe);
     }
@@ -452,14 +468,23 @@ mod tests {
 
         // Test unsafe function
         let result = ParsedRust::parse_content(content_with_unsafe_fn).unwrap();
-        assert!(result.capabilities.contains(&Capability::Unsafe), "Should detect unsafe function");
+        assert!(
+            result.capabilities.contains_key(&Capability::Unsafe),
+            "Should detect unsafe function"
+        );
 
         // Test unsafe block
         let result = ParsedRust::parse_content(content_with_unsafe_block).unwrap();
-        assert!(result.capabilities.contains(&Capability::Unsafe), "Should detect unsafe block");
+        assert!(
+            result.capabilities.contains_key(&Capability::Unsafe),
+            "Should detect unsafe block"
+        );
 
         // Test safe code
         let result = ParsedRust::parse_content(content_without_unsafe).unwrap();
-        assert!(!result.capabilities.contains(&Capability::Unsafe), "Should not detect unsafe in safe code");
+        assert!(
+            !result.capabilities.contains_key(&Capability::Unsafe),
+            "Should not detect unsafe in safe code"
+        );
     }
 }

@@ -113,23 +113,35 @@ impl Checker {
                 _ => unreachable!(),
             };
 
-            match ParsedRust::parse_file(&artifact.target.src_path) {
-                Ok(parsed) => {
-                    let ParsedRust { all_paths, capabilities: _ } = parsed;
-                    DeducedCaps::from_paths(&self.rules, all_paths.into_iter())?
-                }
-                Err(err) => {
-                    let mut deduced_caps = DeducedCaps::default();
-                    deduced_caps.caps.insert(
-                        Capability::Unknown,
-                        std::iter::once(Reason::SourceParseError(format!("{err:#}"))).collect(),
-                    );
-                    deduced_caps
-                }
-            }
+            Default::default()
         } else {
             deduce_caps_of_binary(&self.rules, bin_path)?
         };
+
+        match ParsedRust::parse_file(&artifact.target.src_path) {
+            Ok(parsed) => {
+                let ParsedRust {
+                    all_paths,
+                    capabilities,
+                } = parsed;
+                for rust_path in all_paths {
+                    deduced_caps.add_path(&self.rules, rust_path)?;
+                }
+                for (capability, reasons) in capabilities {
+                    deduced_caps
+                        .caps
+                        .entry(capability)
+                        .or_default()
+                        .extend(reasons);
+                }
+            }
+            Err(err) => {
+                deduced_caps.caps.insert(
+                    Capability::Unknown,
+                    std::iter::once(Reason::SourceParseError(format!("{err:#}"))).collect(),
+                );
+            }
+        }
 
         // Extend capabilities with the capabilities of our actual dependencies.
         // TODO: we do it again below, but differently

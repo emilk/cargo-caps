@@ -165,6 +165,10 @@ pub enum Reason {
     /// Path to `alloc`, `core`, or `std` that didn't match any rule in `default_rules.eon`.
     UmatchedStandardPath(RustPath),
 
+    /// Because of analysing the source code.
+    // TODO: add path, file, line number
+    SourceCodeAnalysis,
+
     /// We have this capability because we depend on this crate, which has that capability.
     Crate(CrateName),
 }
@@ -177,6 +181,7 @@ impl std::fmt::Display for Reason {
             Self::SymbolMatchedRule(symbol) | Self::UnmatchedSymbol(symbol) => {
                 write!(f, "{}", symbol.format(false))
             }
+            Self::SourceCodeAnalysis => write!(f, "source code"),
             Self::Crate(crate_name) => crate_name.fmt(f),
         }
     }
@@ -266,7 +271,7 @@ impl DeducedCaps {
         Ok(())
     }
 
-    fn add_path(&mut self, rules: &SymbolRules, rust_path: RustPath) -> anyhow::Result<()> {
+    pub fn add_path(&mut self, rules: &SymbolRules, rust_path: RustPath) -> anyhow::Result<()> {
         let path_str = rust_path.to_string();
         // Check rules for the path
         if let Some(capabilities) = rules.match_symbol(&path_str) {
@@ -300,6 +305,7 @@ pub fn format_reasons(reasons: &Reasons) -> String {
     let mut unmatched_paths = vec![];
     let mut unmatched_symbols = vec![];
     let mut source_parse_errors = vec![];
+    let mut source_code_analysis_count = 0;
 
     for reason in reasons {
         match reason {
@@ -320,6 +326,9 @@ pub fn format_reasons(reasons: &Reasons) -> String {
             }
             Reason::SourceParseError(error) => {
                 source_parse_errors.push(error);
+            }
+            Reason::SourceCodeAnalysis => {
+                source_code_analysis_count += 1;
             }
         }
     }
@@ -360,6 +369,8 @@ pub fn format_reasons(reasons: &Reasons) -> String {
         format_long_list("unknown symbols", &unmatched_symbols)
     } else if !source_parse_errors.is_empty() {
         format_long_list("source parse error", &source_parse_errors)
+    } else if source_code_analysis_count > 0 {
+        "source code".to_string()
     } else {
         unreachable!()
     }
