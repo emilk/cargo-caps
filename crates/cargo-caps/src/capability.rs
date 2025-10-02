@@ -9,7 +9,57 @@ use crate::{
     rust_path::RustPath, symbol::FunctionOrPath,
 };
 
-pub type CapabilitySet = BTreeSet<Capability>;
+/// A set of capabilities.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct CapabilitySet(BTreeSet<Capability>);
+
+impl CapabilitySet {
+    pub fn new() -> Self {
+        Self(BTreeSet::new())
+    }
+
+    pub fn insert(&mut self, cap: Capability) -> bool {
+        self.0.insert(cap)
+    }
+
+    pub fn contains(&self, cap: &Capability) -> bool {
+        self.0.contains(cap)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Capability> {
+        self.0.iter()
+    }
+
+    pub fn difference<'a>(&'a self, other: &'a Self) -> impl Iterator<Item = &'a Capability> {
+        self.0.difference(&other.0)
+    }
+}
+
+impl FromIterator<Capability> for CapabilitySet {
+    fn from_iter<T: IntoIterator<Item = Capability>>(iter: T) -> Self {
+        Self(BTreeSet::from_iter(iter))
+    }
+}
+
+impl Extend<Capability> for CapabilitySet {
+    fn extend<T: IntoIterator<Item = Capability>>(&mut self, iter: T) {
+        self.0.extend(iter);
+    }
+}
+
+impl<'a> IntoIterator for &'a CapabilitySet {
+    type Item = &'a Capability;
+    type IntoIter = std::collections::btree_set::Iter<'a, Capability>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
 
 /// A capability a crate can be granted,
 /// or is suspected of having.
@@ -90,6 +140,13 @@ impl Capability {
             Self::Unsafe | Self::Command | Self::Unknown | Self::Wildcard => true,
         }
     }
+
+    /// Should we inherit this capability if a dependency has it?
+    pub fn inherit_from_dependency(&self) -> bool {
+        // Motivation: all critical dependencies need explicit vetting,
+        // and once vetted they _should_ shrink from e.g. "unknown" or "unsafe" to something actually known.
+        !self.is_critical()
+    }
 }
 
 impl std::fmt::Display for Capability {
@@ -124,7 +181,7 @@ impl Capability {
             Self::Thread => "🧵",
             Self::Net => "🌐",
             Self::FS => "📁",
-            Self::Unsafe => "⚡",
+            Self::Unsafe => "☢️",
             Self::Command => "⚠️ ",
             Self::Unknown => "❓",
             Self::Wildcard => "🃏 ", // TODO: its own symbol?
@@ -195,17 +252,6 @@ impl DeducedCaps {
         let mut slf = Self::default();
         for symbol in symbols {
             slf.add_symbol(rules, &symbol)?;
-        }
-        Ok(slf)
-    }
-
-    pub fn from_paths(
-        rules: &SymbolRules,
-        paths: impl IntoIterator<Item = RustPath>,
-    ) -> anyhow::Result<Self> {
-        let mut slf = Self::default();
-        for path in paths {
-            slf.add_path(rules, path)?;
         }
         Ok(slf)
     }
@@ -296,6 +342,22 @@ impl DeducedCaps {
 
         Ok(())
     }
+
+    pub fn extend(&mut self, other: Self) {
+        let Self {
+            caps,
+            unresolved_crates,
+        } = self;
+        for (cap, reasons) in other.caps {
+            caps.entry(cap).or_default().extend(reasons);
+        }
+        for (crate_name, reasons) in other.unresolved_crates {
+            unresolved_crates
+                .entry(crate_name)
+                .or_default()
+                .extend(reasons);
+        }
+    }
 }
 
 pub fn format_reasons(reasons: &Reasons) -> String {
@@ -370,7 +432,7 @@ pub fn format_reasons(reasons: &Reasons) -> String {
     } else if !source_parse_errors.is_empty() {
         format_long_list("source parse error", &source_parse_errors)
     } else if source_code_analysis_count > 0 {
-        "source code".to_string()
+        "source code".to_owned()
     } else {
         unreachable!()
     }

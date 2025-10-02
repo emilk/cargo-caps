@@ -1,9 +1,7 @@
 use cargo_metadata::camino::Utf8PathBuf;
 
 use crate::{
-    cap_rule::SymbolRules,
-    capability::{Capability, DeducedCaps},
-    reservoir_sample::ReservoirSampleExt as _,
+    cap_rule::SymbolRules, capability::DeducedCaps, reservoir_sample::ReservoirSampleExt as _,
 };
 
 #[derive(clap::Parser)]

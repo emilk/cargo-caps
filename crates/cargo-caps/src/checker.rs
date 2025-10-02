@@ -153,11 +153,13 @@ impl Checker {
                 if let Some(dep_caps) = crate_caps.get(&TargetKind::Lib) {
                     // If a dependency has a capability, then so do we!
                     for &cap in dep_caps.caps.keys() {
-                        deduced_caps
-                            .caps
-                            .entry(cap)
-                            .or_default()
-                            .insert(Reason::Crate(dep_crate_name.clone()));
+                        if cap.inherit_from_dependency() {
+                            deduced_caps
+                                .caps
+                                .entry(cap)
+                                .or_default()
+                                .insert(Reason::Crate(dep_crate_name.clone()));
+                        }
                     }
                 } else {
                     // TODO: return error?
@@ -248,11 +250,10 @@ impl Checker {
                 // Why? Because we don't know on which version the symbol is referring to
                 // … or do we???
 
-                crate_caps.insert(kind.clone(), deduced_caps.clone());
-                //     crate_caps
-                //         .entry(kind.clone())
-                //         .or_default()
-                //         .union_with(deduced_caps.clone());
+                crate_caps
+                    .entry(kind.clone())
+                    .or_default()
+                    .extend(deduced_caps.clone());
             }
         }
 
