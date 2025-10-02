@@ -11,6 +11,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
+    sync::Arc,
 };
 
 use anyhow::Context as _;
@@ -20,7 +21,7 @@ use proc_macro2::Span;
 use syn::{Type, UseTree, punctuated::Punctuated, spanned::Spanned as _, visit::Visit};
 
 use crate::{
-    capability::{Capability, Reason, Reasons},
+    capability::{Capability, Reason, Reasons, SourceLocation},
     rust_path::RustPath,
 };
 
@@ -161,7 +162,7 @@ struct ParserState {
     imports: Vec<Import>,
 
     /// Current file being parsed (used for resolving module paths).
-    current_file: Utf8PathBuf,
+    current_file: Arc<Utf8PathBuf>,
 }
 
 impl ParserState {
@@ -169,7 +170,7 @@ impl ParserState {
     fn parse_content(rust_source: &str, current_file: &Utf8Path) -> anyhow::Result<Self> {
         let syntax_tree = syn::parse_file(rust_source)?;
         let mut usage = Self {
-            current_file: current_file.to_path_buf(),
+            current_file: current_file.to_path_buf().into(),
             ..Self::default()
         };
         usage.visit_file(&syntax_tree);
@@ -254,6 +255,13 @@ impl ParserState {
             self.all_paths.insert(rust_path);
         }
     }
+
+    fn location_from_span(&self, span: Span) -> SourceLocation {
+        SourceLocation {
+            path: self.current_file.clone(),
+            line_nr: span.start().line,
+        }
+    }
 }
 
 fn as_rust_path(syn_path: &syn::Path) -> RustPath {
@@ -290,10 +298,11 @@ impl<'ast> Visit<'ast> for ParserState {
     fn visit_item_fn(&mut self, item_fn: &'ast syn::ItemFn) {
         // Check if function is unsafe
         if item_fn.sig.unsafety.is_some() {
+            let location = self.location_from_span(item_fn.span());
             self.capabilities
                 .entry(Capability::Unsafe)
                 .or_default()
-                .insert(Reason::SourceCodeAnalysis);
+                .insert(Reason::SourceCodeAnalysis { location });
         }
         // Continue visiting nested items
         syn::visit::visit_item_fn(self, item_fn);
@@ -301,10 +310,11 @@ impl<'ast> Visit<'ast> for ParserState {
 
     fn visit_expr_unsafe(&mut self, expr_unsafe: &'ast syn::ExprUnsafe) {
         // This handles unsafe expressions like `unsafe { ... }`
+        let location = self.location_from_span(expr_unsafe.span());
         self.capabilities
             .entry(Capability::Unsafe)
             .or_default()
-            .insert(Reason::SourceCodeAnalysis);
+            .insert(Reason::SourceCodeAnalysis { location });
         // Continue visiting nested items
         syn::visit::visit_expr_unsafe(self, expr_unsafe);
     }

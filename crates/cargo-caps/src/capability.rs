@@ -1,6 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use anyhow::Context as _;
+use cargo_metadata::camino::Utf8PathBuf;
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
@@ -214,6 +218,10 @@ pub enum Reason {
     /// The reason we have this high capability is because we didn't succeed in understanding the source code.
     SourceParseError(String),
 
+    /// Because of analysing the source code.
+    // TODO: add path, file, line number
+    SourceCodeAnalysis { location: SourceLocation },
+
     /// The reason we have this high capability is because we couldn't match this symbol to any rule.
     ///
     /// If you hit this, you need to extend `default_rules.eon`
@@ -221,10 +229,6 @@ pub enum Reason {
 
     /// Path to `alloc`, `core`, or `std` that didn't match any rule in `default_rules.eon`.
     UmatchedStandardPath(RustPath),
-
-    /// Because of analysing the source code.
-    // TODO: add path, file, line number
-    SourceCodeAnalysis,
 
     /// We have this capability because we depend on this crate, which has that capability.
     Crate(CrateName),
@@ -238,9 +242,22 @@ impl std::fmt::Display for Reason {
             Self::SymbolMatchedRule(symbol) | Self::UnmatchedSymbol(symbol) => {
                 write!(f, "{}", symbol.format(false))
             }
-            Self::SourceCodeAnalysis => write!(f, "source code"),
+            Self::SourceCodeAnalysis { location } => write!(f, "source: {location}"),
             Self::Crate(crate_name) => crate_name.fmt(f),
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SourceLocation {
+    pub path: Arc<Utf8PathBuf>,
+    pub line_nr: usize,
+}
+
+impl std::fmt::Display for SourceLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { path, line_nr } = self;
+        write!(f, "{path}:{line_nr}")
     }
 }
 
@@ -367,7 +384,7 @@ pub fn format_reasons(reasons: &Reasons) -> String {
     let mut unmatched_paths = vec![];
     let mut unmatched_symbols = vec![];
     let mut source_parse_errors = vec![];
-    let mut source_code_analysis_count = 0;
+    let mut source_code_locations = vec![];
 
     for reason in reasons {
         match reason {
@@ -389,8 +406,8 @@ pub fn format_reasons(reasons: &Reasons) -> String {
             Reason::SourceParseError(error) => {
                 source_parse_errors.push(error);
             }
-            Reason::SourceCodeAnalysis => {
-                source_code_analysis_count += 1;
+            Reason::SourceCodeAnalysis { location } => {
+                source_code_locations.push(location);
             }
         }
     }
@@ -431,8 +448,8 @@ pub fn format_reasons(reasons: &Reasons) -> String {
         format_long_list("unknown symbols", &unmatched_symbols)
     } else if !source_parse_errors.is_empty() {
         format_long_list("source parse error", &source_parse_errors)
-    } else if source_code_analysis_count > 0 {
-        "source code".to_owned()
+    } else if !source_code_locations.is_empty() {
+        format_long_list("source code", &source_code_locations)
     } else {
         unreachable!()
     }
