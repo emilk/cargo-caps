@@ -8,6 +8,7 @@ use crate::{
     config::WorkspaceConfig,
     src_analysis::ParsedRust,
 };
+use anyhow::Context as _;
 use cargo_metadata::{
     Artifact, DependencyKind, Metadata, Package, PackageId, TargetKind, camino::Utf8Path,
 };
@@ -48,7 +49,7 @@ impl Checker {
             .packages
             .iter()
             .find(|p| p.id == artifact.package_id)
-            .unwrap(); // TODO
+            .context("Failed to find package in metadata")?;
 
         let set = if let Some(set) = crate_infos.get(&artifact.package_id) {
             // TODO
@@ -176,12 +177,16 @@ impl Checker {
 
         // Extend capabilities with the capabilities of our supposed dependencies.
         // TODO: we do it already above, but differently
-        let resolve = self.metadata.resolve.as_ref().unwrap();
+        let resolve = self
+            .metadata
+            .resolve
+            .as_ref()
+            .context("Failed to resolve dependencies in metadata")?;
         let node = resolve
             .nodes
             .iter()
             .find(|node| node.id == package.id)
-            .unwrap();
+            .context("Failed to find package in dependency tree")?;
         for dependency in &node.deps {
             if !dependency
                 .dep_kinds

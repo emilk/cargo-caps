@@ -167,7 +167,7 @@ impl DepGraph {
         let mut queue = VecDeque::new();
 
         // Start with all nodes that have non-empty 'kind' field
-        #[expect(clippy::iter_over_hash_type)]
+        #[expect(clippy::iter_over_hash_type, reason = "We need both key and value")]
         for &node_idx in self.package_to_node.values() {
             if !self.graph[node_idx].kind.is_empty() {
                 queue.push_back(node_idx);
@@ -250,7 +250,7 @@ fn dependency_kind_from_edge_and_dependent(edge: &Edge, dependent: &Node) -> BTr
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::single_char_pattern)]
+    #![allow(clippy::single_char_pattern, reason = "Test code")]
 
     use cargo_metadata::PackageId;
 

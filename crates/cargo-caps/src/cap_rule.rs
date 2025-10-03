@@ -40,6 +40,10 @@ pub struct SymbolRules {
 }
 
 impl SymbolRules {
+    #[expect(
+        clippy::expect_used,
+        reason = "Default rules are hardcoded, so this should never fail"
+    )]
     pub fn load_default() -> Self {
         static DEFAULT_RULES_EON: &str = include_str!("default_rules.eon");
 

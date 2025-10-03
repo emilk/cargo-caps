@@ -44,6 +44,10 @@ impl RustPath {
         use std::sync::LazyLock;
 
         // Compile the regex once at program startup
+        #[expect(
+            clippy::expect_used,
+            reason = "The regex is hardcoded and should never fail to compile"
+        )]
         static PATH_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
             regex::RegexBuilder::new(
                 r"
@@ -58,7 +62,7 @@ impl RustPath {
             .ignore_whitespace(true)
             .unicode(false)
             .build()
-            .unwrap()
+            .expect("Failed to build regex")
         });
 
         PATH_REGEX

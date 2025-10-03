@@ -10,7 +10,7 @@ struct Args {
 }
 
 fn main() {
-    #![allow(clippy::exit)]
+    #![allow(clippy::exit, reason = "we want to exit with code 1 on error")] // --> we could also return a Result from main so its more clear?
 
     env_logger::init();
 
