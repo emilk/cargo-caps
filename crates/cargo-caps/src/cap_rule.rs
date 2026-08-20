@@ -120,6 +120,6 @@ fn test_default_rules() {
     assert_eq!(rules.match_symbol("unknown"), None);
     assert_eq!(
         rules.match_symbol("malloc"),
-        Some(&std::iter::once(Capability::Alloc).collect())
+        Some(&core::iter::once(Capability::Alloc).collect())
     );
 }

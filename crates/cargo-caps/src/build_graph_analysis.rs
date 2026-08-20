@@ -19,8 +19,8 @@ pub enum DepKind {
     ProcMacro,
 }
 
-impl std::fmt::Display for DepKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for DepKind {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Unknown => write!(f, "⚠️ unknown dependency type"),
             Self::Normal => write!(f, "normal dependency"),
@@ -57,7 +57,7 @@ struct Edge {
 impl From<DepKind> for Edge {
     fn from(kind: DepKind) -> Self {
         Self {
-            kind: std::iter::once(kind).collect(),
+            kind: core::iter::once(kind).collect(),
         }
     }
 }
@@ -75,7 +75,7 @@ impl DepGraph {
     pub fn insert_node(&mut self, package_id: &PackageId, kind: DepKind) {
         let node = Node {
             id: package_id.clone(),
-            kind: std::iter::once(kind).collect(),
+            kind: core::iter::once(kind).collect(),
         };
         let node_idx = self.graph.add_node(node);
         let prev = self.package_to_node.insert(package_id.clone(), node_idx);
@@ -262,7 +262,7 @@ mod tests {
 
     fn set(crate_kind: DepKind) -> DepKindSet {
         DepKindSet {
-            kind: std::iter::once(crate_kind).collect(),
+            kind: core::iter::once(crate_kind).collect(),
         }
     }
 

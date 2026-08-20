@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    io::{Cursor, Read as _},
-};
+use std::{fs, io::Read as _};
 
 use anyhow::{Context as _, Result};
 use cargo_metadata::camino::Utf8Path;
@@ -33,6 +30,10 @@ pub use commands::Commands;
 use crate_name::CrateName;
 
 /// Extract symbols from an binary, e..g an executable, `.dylib`, or an `.rlib`.
+#[expect(
+    clippy::std_instead_of_core,
+    reason = "`core::io::Cursor` is still unstable"
+)]
 fn extract_symbols(binary_path: &Utf8Path) -> Result<Vec<Symbol>> {
     let file_bytes =
         fs::read(binary_path).with_context(|| format!("Failed to read {binary_path}"))?;
@@ -44,7 +45,7 @@ fn extract_symbols(binary_path: &Utf8Path) -> Result<Vec<Symbol>> {
 
     if is_ar_archive {
         // .rlib
-        let mut archive = ar::Archive::new(Cursor::new(file_bytes));
+        let mut archive = ar::Archive::new(std::io::Cursor::new(file_bytes));
 
         // Extract and process each object file in the archive
         while let Some(entry_result) = archive.next_entry() {
