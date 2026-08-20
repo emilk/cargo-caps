@@ -89,8 +89,8 @@ impl ParsedRust {
     }
 
     /// Parse Rust source code content and return external usage information
+    #[cfg(test)]
     fn parse_content(rust_source: &str) -> anyhow::Result<Self> {
-        // This method is kept for backward compatibility but now uses the current directory
         let current_dir = Utf8PathBuf::from(".");
         let ParserState {
             all_paths,

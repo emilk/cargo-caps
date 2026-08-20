@@ -5,7 +5,7 @@ use crate::{rust_path::RustPath, symbol::Symbol};
 #[derive(Debug, Clone)]
 pub enum Tree {
     Leaf(Symbol),
-    Node(BTreeMap<String, Tree>),
+    Node(BTreeMap<String, Self>),
 }
 
 impl Default for Tree {

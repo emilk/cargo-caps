@@ -50,20 +50,16 @@ impl Checker {
             .find(|p| p.id == artifact.package_id)
             .unwrap(); // TODO
 
-        let set = if let Some(set) = crate_infos.get(&artifact.package_id) {
-            // TODO
-            // if !set.kind.contains(&DepKind::Normal) {
-            //     return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
-            // }
-
-            set
-        } else {
+        let Some(set) = crate_infos.get(&artifact.package_id) else {
             // Not sure why we sometimes end up here.
             // Examples: bitflags block2 objc2 objc2_app_kit memoffset rustix
             println!("ERROR: unknown crate {}", artifact.target.name);
             return Ok(());
-            // None
         };
+        // TODO
+        // if !set.kind.contains(&DepKind::Normal) {
+        //     return Ok(()); // ignore build dependencies, proc-macros etc - they cannot affect users machines
+        // }
 
         for file_path in &artifact.filenames {
             if file_path.as_str().ends_with(".rmeta") {
@@ -107,12 +103,6 @@ impl Checker {
             // build.rs files and proc-macros are binaries with a main function and everything.
             // There is very little they can't do.
             // So they will always be sus
-            let artifact_kind_name = match artifact_kind {
-                TargetKind::CustomBuild => "build.rs",
-                TargetKind::ProcMacro => "proc-macro",
-                _ => unreachable!(),
-            };
-
             Default::default()
         } else {
             deduce_caps_of_binary(&self.rules, bin_path)?
