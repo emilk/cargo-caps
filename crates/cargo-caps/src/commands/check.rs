@@ -76,7 +76,10 @@ impl CheckCommand {
 
         let mut child = cmd.stdout(Stdio::piped()).spawn()?;
 
-        let stdout = child.stdout.take().unwrap();
+        let stdout = child
+            .stdout
+            .take()
+            .context("Failed to capture stdout of cargo")?;
         let reader = BufReader::new(stdout);
 
         let checker = Checker {

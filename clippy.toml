@@ -1,0 +1,26 @@
+# Adapted from https://github.com/emilk/egui/blob/main/clippy.toml
+
+msrv = "1.97"
+
+allow-unwrap-in-tests = true
+
+# https://doc.rust-lang.org/nightly/clippy/lint_configuration.html#avoid-breaking-exported-api
+# We want suggestions, even if it changes public API.
+avoid-breaking-exported-api = false
+
+# https://rust-lang.github.io/rust-clippy/master/index.html#disallowed_macros
+disallowed-macros = [
+  'std::dbg',
+  'std::unimplemented',
+]
+
+# https://rust-lang.github.io/rust-clippy/master/index.html#disallowed_methods
+disallowed-methods = [
+  { path = "std::env::temp_dir", reason = "Use the tempfile crate instead" },
+]
+
+# https://rust-lang.github.io/rust-clippy/master/index.html#disallowed_names
+disallowed-names = []
+
+# https://rust-lang.github.io/rust-clippy/master/index.html#disallowed_types
+disallowed-types = []

@@ -36,7 +36,7 @@ impl Tree {
                 let may_collapse_child = children.len() == 1;
                 for child in children.values_mut() {
                     *child =
-                        std::mem::take(child).collapse_single_nodes(depth + 1, may_collapse_child);
+                        core::mem::take(child).collapse_single_nodes(depth + 1, may_collapse_child);
                 }
 
                 if may_collapse

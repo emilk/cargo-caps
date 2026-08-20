@@ -8,6 +8,7 @@ use crate::{
     config::WorkspaceConfig,
     src_analysis::ParsedRust,
 };
+use anyhow::Context as _;
 use cargo_metadata::{
     Artifact, DependencyKind, Metadata, Package, PackageId, TargetKind, camino::Utf8Path,
 };
@@ -48,7 +49,7 @@ impl Checker {
             .packages
             .iter()
             .find(|p| p.id == artifact.package_id)
-            .unwrap(); // TODO
+            .with_context(|| format!("Unknown package {}", artifact.package_id))?;
 
         let Some(set) = crate_infos.get(&artifact.package_id) else {
             // Not sure why we sometimes end up here.
@@ -62,7 +63,10 @@ impl Checker {
         // }
 
         for file_path in &artifact.filenames {
-            if file_path.as_str().ends_with(".rmeta") {
+            if std::path::Path::new(file_path.as_str())
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("rmeta"))
+            {
                 // .rmeta files has all the symbols and function signatures,
                 // without any of the compiled code.
                 // It what makes `cargo check` faster than `cargo build`.
@@ -128,14 +132,14 @@ impl Checker {
             Err(err) => {
                 deduced_caps.caps.insert(
                     Capability::Unknown,
-                    std::iter::once(Reason::SourceParseError(format!("{err:#}"))).collect(),
+                    core::iter::once(Reason::SourceParseError(format!("{err:#}"))).collect(),
                 );
             }
         }
 
         // Extend capabilities with the capabilities of our actual dependencies.
         // TODO: we do it again below, but differently
-        for (dep_crate_name, _) in std::mem::take(&mut deduced_caps.unresolved_crates) {
+        for (dep_crate_name, _) in core::mem::take(&mut deduced_caps.unresolved_crates) {
             if dep_crate_name == crate_name {
                 continue; // A crate can depend on itself
             }
@@ -168,12 +172,16 @@ impl Checker {
 
         // Extend capabilities with the capabilities of our supposed dependencies.
         // TODO: we do it already above, but differently
-        let resolve = self.metadata.resolve.as_ref().unwrap();
+        let resolve = self
+            .metadata
+            .resolve
+            .as_ref()
+            .context("cargo metadata has no resolved dependency graph")?;
         let node = resolve
             .nodes
             .iter()
             .find(|node| node.id == package.id)
-            .unwrap();
+            .with_context(|| format!("Package {} missing from dependency graph", package.id))?;
         for dependency in &node.deps {
             if !dependency
                 .dep_kinds
@@ -277,9 +285,7 @@ impl Checker {
             .map(|(c, reasons)| format!("{} {c} because of {}", c.emoji(), format_reasons(reasons)))
             .collect_vec();
 
-        let info = if !criticals.is_empty() {
-            criticals.join(", ")
-        } else {
+        let info = if criticals.is_empty() {
             let filtered_caps = filter_capabilities(&deduced_caps, &allowed_caps);
 
             if filtered_caps.is_empty() {
@@ -295,6 +301,8 @@ impl Checker {
                     .collect();
                 cap_names.join(", ")
             }
+        } else {
+            criticals.join(", ")
         };
 
         println!("{crate_name}{crate_kind_suffix}: {info}");

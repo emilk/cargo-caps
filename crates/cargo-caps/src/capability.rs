@@ -153,8 +153,8 @@ impl Capability {
     }
 }
 
-impl std::fmt::Display for Capability {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Capability {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::BuildRs => write!(f, "build.rs"),
             Self::Alloc => write!(f, "alloc"),
@@ -234,8 +234,8 @@ pub enum Reason {
     Crate(CrateName),
 }
 
-impl std::fmt::Display for Reason {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Reason {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::PathMatchedRule(path) | Self::UmatchedStandardPath(path) => path.fmt(f),
             Self::SourceParseError(err) => write!(f, "{err:#?}"),
@@ -254,8 +254,8 @@ pub struct SourceLocation {
     pub line_nr: usize,
 }
 
-impl std::fmt::Display for SourceLocation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for SourceLocation {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let Self { path, line_nr } = self;
         write!(f, "{path}:{line_nr}")
     }
@@ -412,16 +412,18 @@ pub fn format_reasons(reasons: &Reasons) -> String {
         }
     }
 
-    fn format_long_list<T: std::fmt::Display>(header: &str, reasons: &[T]) -> String {
+    fn format_long_list<T: core::fmt::Display>(header: &str, reasons: &[T]) -> String {
+        use core::fmt::Write as _;
+
         let max_width = 60;
         let mut string = format!("{header}:");
         let mut num_left = reasons.len();
         for reason in reasons.iter().reservoir_sample(5) {
             if string.len() < max_width {
-                string += &format!(" {reason}");
+                write!(string, " {reason}").ok();
                 num_left -= 1;
             } else {
-                string += &format!(" … + {num_left} more");
+                write!(string, " … + {num_left} more").ok();
                 break;
             }
         }

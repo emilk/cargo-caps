@@ -1,4 +1,5 @@
-use std::{fmt, ops::Deref};
+use core::ops::Deref;
+use std::fmt;
 
 use itertools::Itertools as _;
 /// A Rust module or item path like `std::collections::Vec` or `my_crate::module::function`.
@@ -58,7 +59,7 @@ impl RustPath {
             .ignore_whitespace(true)
             .unicode(false)
             .build()
-            .unwrap()
+            .expect("Invalid regex")
         });
 
         PATH_REGEX

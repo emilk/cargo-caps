@@ -193,7 +193,11 @@ impl ParserState {
 
                 if ident == "self" {
                     self.imports.push(Import {
-                        ident: (*prefix.segments().last().unwrap()).to_owned(),
+                        ident: (*prefix
+                            .segments()
+                            .last()
+                            .expect("`use …::self` with empty prefix"))
+                        .to_owned(),
                         path: prefix,
                     });
                 } else {
@@ -258,7 +262,7 @@ impl ParserState {
 
     fn location_from_span(&self, span: Span) -> SourceLocation {
         SourceLocation {
-            path: self.current_file.clone(),
+            path: Arc::clone(&self.current_file),
             line_nr: span.start().line,
         }
     }
@@ -457,18 +461,18 @@ mod tests {
 
     #[test]
     fn test_unsafe_detection() {
-        let content_with_unsafe_fn = r#"
+        let content_with_unsafe_fn = r"
             unsafe fn dangerous_function() {
                 // This is an unsafe function
             }
-        "#;
+        ";
 
-        let content_with_unsafe_block = r#"
+        let content_with_unsafe_block = r"
             fn main() {
                 let raw_ptr = 0x123 as *const i32;
                 let value = unsafe { *raw_ptr };
             }
-        "#;
+        ";
 
         let content_without_unsafe = r#"
             fn safe_function() {
