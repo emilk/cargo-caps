@@ -278,14 +278,14 @@ impl Checker {
             }
         };
 
-        let criticals = deduced_caps
+        let critical_caps = deduced_caps
             .caps
             .iter()
             .filter(|(c, _)| c.is_critical())
             .map(|(c, reasons)| format!("{} {c} because of {}", c.emoji(), format_reasons(reasons)))
             .collect_vec();
 
-        let info = if criticals.is_empty() {
+        let info = if critical_caps.is_empty() {
             let filtered_caps = filter_capabilities(&deduced_caps, &allowed_caps);
 
             if filtered_caps.is_empty() {
@@ -302,7 +302,7 @@ impl Checker {
                 cap_names.join(", ")
             }
         } else {
-            criticals.join(", ")
+            critical_caps.join(", ")
         };
 
         println!("{crate_name}{crate_kind_suffix}: {info}");

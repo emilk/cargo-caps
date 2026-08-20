@@ -128,7 +128,7 @@ pub enum Capability {
 }
 
 impl Capability {
-    /// Any capability that is "critical" could theoretically lead to all other capapbilities.
+    /// Any capability that is "critical" could theoretically lead to all other capabilities.
     pub fn is_critical(&self) -> bool {
         match self {
             Self::BuildRs
