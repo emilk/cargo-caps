@@ -31,7 +31,6 @@ cpp_demangle.workspace = true
 env_logger.workspace = true
 eon.workspace = true
 itertools.workspace = true
-log-once.workspace = true
 log.workspace = true
 object.workspace = true
 petgraph.workspace = true
