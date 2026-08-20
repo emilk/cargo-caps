@@ -30,7 +30,9 @@ all-features = true
 
 [advisories]
 version = 2
-ignore = []
+ignore = [
+  "RUSTSEC-2026-0097", # `rand` 0.7 is unsound with a custom logger. We only use it as a test fixture in `test_caps`.
+]
 
 
 [bans]
@@ -40,7 +42,15 @@ deny = [
   { name = "openssl", reason = "Use rustls" },
   { name = "openssl-sys", reason = "Use rustls" },
 ]
-skip = []
+skip = [
+  # `test_caps` deliberately depends on multiple old `rand` versions (the `two_rands` test feature):
+  { name = "getrandom", version = "<0.3" },
+  { name = "rand", version = "<0.9" },
+  { name = "rand_chacha", version = "<0.9" },
+  { name = "rand_core", version = "<0.9" },
+
+  { name = "syn", version = "2" }, # Build-time proc-macro dep. `serde_derive`, `thiserror-impl`, and `clap_derive` have moved to `syn` 3, but we still use `syn` 2 ourselves.
+]
 skip-tree = []
 
 
