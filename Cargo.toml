@@ -7,7 +7,7 @@ authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/emilk/cargo-caps"
-rust-version = "1.89"
+rust-version = "1.97"
 version = "0.0.2"
 
 [workspace.dependencies]
