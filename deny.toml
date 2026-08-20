@@ -17,7 +17,6 @@ targets = [
   { triple = "i686-pc-windows-gnu" },
   { triple = "i686-pc-windows-msvc" },
   { triple = "i686-unknown-linux-gnu" },
-  { triple = "wasm32-unknown-unknown" },
   { triple = "x86_64-apple-darwin" },
   { triple = "x86_64-pc-windows-gnu" },
   { triple = "x86_64-pc-windows-msvc" },
